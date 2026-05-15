@@ -1,0 +1,98 @@
+# FlowMarkets：顺序研究链（Sequential）。占位符：{{user_query}}、{{symbol}}、{{notes}}
+# symbol 为空时由 Agent 写「未指定」，不得编造实时行情。
+
+task_fm_market:
+  agent: market_analyst
+  context: []
+  description: |
+    用户诉求：{{user_query}}
+    标的提示（可为空）：{{symbol}}
+    补充说明：{{notes}}
+
+    请输出「市场结构简报」Markdown，须含：① 事实 / 推断 / 假设 分区 ② 流动性与市场阶段（若信息不足标「待数据」）③ 关键驱动因子清单 ④ 非投资建议声明。
+  expected_output: |
+    一份 Markdown《市场结构简报》，结构清晰，无编造具体价格/成交量数字（无工具时明确写待接入）。
+
+task_fm_narrative:
+  agent: narrative_analyst
+  context:
+    - task_fm_market
+  description: |
+    在同一用户诉求与标的前提下（{{user_query}}，标的提示：{{symbol}}），结合上一任务《市场结构简报》，归纳公开叙事与信息源类型；无搜索工具时列出待检索关键词与渠道。
+  expected_output: |
+    Markdown《舆情与叙事摘要》，含官方/媒体/社区等标签；未证实信息单独标注。
+
+task_fm_sentiment:
+  agent: sentiment_analyst
+  context:
+    - task_fm_market
+    - task_fm_narrative
+  description: |
+    基于市场简报与叙事摘要，从参与者情绪与行为维度给出评估；须写清指标/观察的失效条件；禁止喊单。
+  expected_output: |
+    Markdown《情绪与行为评估》，结构化分条，含风险提示。
+
+task_fm_technical:
+  agent: technical_analyst
+  context:
+    - task_fm_market
+    - task_fm_sentiment
+  description: |
+    在用户诉求与标的前提下，给出技术分析框架或摘要；若无 OHLCV，仅输出所需参数清单与「待 K 线工具」说明，不虚构 K 线。
+  expected_output: |
+    Markdown《技术分析摘要》或《待数据的技术分析框架》。
+
+task_fm_bull:
+  agent: bull_researcher
+  context:
+    - task_fm_market
+    - task_fm_narrative
+    - task_fm_technical
+  description: |
+    构建看多论证：至少 3 条独立论据、可证伪条件、乐观偏差自检；与空头研究对称，以证据质量为准。
+  expected_output: |
+    Markdown《多头论证》。
+
+task_fm_bear:
+  agent: bear_researcher
+  context:
+    - task_fm_market
+    - task_fm_narrative
+    - task_fm_technical
+  description: |
+    构建风险与看空论证：至少 3 条独立论据，区分已发生/高概率/低概率高影响；拒绝无依据阴谋论。
+  expected_output: |
+    Markdown《空头与风险论证》。
+
+task_fm_synthesis:
+  agent: research_manager
+  context:
+    - task_fm_market
+    - task_fm_narrative
+    - task_fm_sentiment
+    - task_fm_technical
+    - task_fm_bull
+    - task_fm_bear
+  description: |
+    整合前述各域产出，消除重复与矛盾，给出主结论与备选情景、信息缺口与下一步研究任务；证据不足时主结论可为「无法判定」。
+  expected_output: |
+    Markdown《研究经理综合摘要》，含分歧表与置信度说明。
+
+task_fm_trading:
+  agent: trader
+  context:
+    - task_fm_synthesis
+  description: |
+    在研究经理综合摘要基础上，输出可讨论的交易思路：时间尺度、入场/风控/减仓的逻辑类型（非具体下单指令）、执行纪律；低置信度时输出观望与触发条件。
+  expected_output: |
+    Markdown《交易思路与风控检查清单》。强调模拟与回测优先；含高风险警示（杠杆/合约若相关）。
+
+task_fm_portfolio:
+  agent: portfolio_manager
+  context:
+    - task_fm_synthesis
+    - task_fm_trading
+  description: |
+    从组合视角给出集中度、相关性、风险预算与再平衡原则（定性）；承接非投资建议合规表述；结尾用单独一节「免责声明」。
+  expected_output: |
+    Markdown《组合视角与免责声明》终稿，作为整条研究链面向用户的最终交付物之一（可与前序章节合并阅读）。
