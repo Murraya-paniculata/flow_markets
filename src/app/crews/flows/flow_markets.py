@@ -14,6 +14,17 @@ from crewai.project import CrewBase, agent, crew, task
 from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
 from app.crews.llm import get_llm
+from app.schemas.flow_markets_deliverables import (
+    MarketStructureBrief,
+    NarrativeBrief,
+    PortfolioBrief,
+    ResearchSynthesis,
+    SentimentAssessment,
+    TechnicalBrief,
+    TradingPlaybook,
+    assemble_flow_markets_report,
+)
+from app.schemas.trading_agents import BearResearchCase, BullResearchCase
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
 
@@ -49,6 +60,14 @@ def _flow_markets_agent(crew_base_instance: Any, key: str) -> Agent:
     if mi is not None:
         kwargs["max_iter"] = int(mi)
     return Agent(**kwargs)
+
+
+def _fm_task(crew_base: Any, key: str, output_model: type) -> Task:
+    """YAML 里程碑描述 + Pydantic 结构化交付契约（见 08 模块 Task 课）。"""
+    return Task(
+        config=crew_base.tasks_config[key],  # type: ignore[index]
+        output_pydantic=output_model,
+    )
 
 
 @CrewBase
@@ -96,39 +115,39 @@ class FlowMarketsCrew:
 
     @task
     def task_fm_market(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_market"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_market", MarketStructureBrief)
 
     @task
     def task_fm_narrative(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_narrative"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_narrative", NarrativeBrief)
 
     @task
     def task_fm_sentiment(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_sentiment"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_sentiment", SentimentAssessment)
 
     @task
     def task_fm_technical(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_technical"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_technical", TechnicalBrief)
 
     @task
     def task_fm_bull(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_bull"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_bull", BullResearchCase)
 
     @task
     def task_fm_bear(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_bear"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_bear", BearResearchCase)
 
     @task
     def task_fm_synthesis(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_synthesis"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_synthesis", ResearchSynthesis)
 
     @task
     def task_fm_trading(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_trading"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_trading", TradingPlaybook)
 
     @task
     def task_fm_portfolio(self) -> Task:
-        return Task(config=self.tasks_config["task_fm_portfolio"])  # type: ignore[index]
+        return _fm_task(self, "task_fm_portfolio", PortfolioBrief)
 
     @crew
     def crew(self) -> Crew:
@@ -241,7 +260,13 @@ def run_flow_markets_analysis(
             logger.warning("flow_markets_metrics_observe_failed", exc_info=True)
         logger.info("flow_markets_done", elapsed_seconds=round(elapsed, 3))
 
-    report = _get_report_from_crew_result(result)
+    report = assemble_flow_markets_report(
+        result,
+        user_query=inputs["user_query"],
+        symbol=inputs["symbol"],
+    )
+    if not report:
+        report = _get_report_from_crew_result(result)
     if not report:
         report = "(未从 Crew 输出解析到报告正文，请检查各任务输出或日志)"
     return report, ""

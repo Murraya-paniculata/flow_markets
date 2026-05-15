@@ -8,7 +8,7 @@ from app.api.dependencies import get_request_id, require_api_key
 from app.crews.flows.flow_markets import run_flow_markets_analysis
 from app.observability.logging import get_logger
 from app.schemas.common import ApiResponse
-from app.schemas.flow_markets import FlowMarketsAnalyzeRequest, FlowMarketsAnalyzeResponse
+from app.schemas.flow_markets_api import FlowMarketsAnalyzeRequest, FlowMarketsAnalyzeResponse
 
 router = APIRouter()
 logger = get_logger(__name__)

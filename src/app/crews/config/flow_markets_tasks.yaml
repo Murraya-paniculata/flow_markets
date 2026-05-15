@@ -1,5 +1,6 @@
-# FlowMarkets：顺序研究链（Sequential）。占位符：{{user_query}}、{{symbol}}、{{notes}}
-# symbol 为空时由 Agent 写「未指定」，不得编造实时行情。
+# FlowMarkets：顺序研究链（Sequential）
+# 占位符：{{user_query}}、{{symbol}}、{{notes}}
+# 结构化交付契约见 app/schemas/flow_markets_deliverables.py（output_pydantic 注入 JSON Schema）
 
 task_fm_market:
   agent: market_analyst
@@ -9,18 +10,21 @@ task_fm_market:
     标的提示（可为空）：{{symbol}}
     补充说明：{{notes}}
 
-    请输出「市场结构简报」Markdown，须含：① 事实 / 推断 / 假设 分区 ② 流动性与市场阶段（若信息不足标「待数据」）③ 关键驱动因子清单 ④ 非投资建议声明。
+    交付里程碑：完成《市场结构简报》结构化输出（MarketStructureBrief）。
+    聚焦宏观与流动性结构；无行情工具时不编造价格/成交量，缺数据处明确标注。
   expected_output: |
-    一份 Markdown《市场结构简报》，结构清晰，无编造具体价格/成交量数字（无工具时明确写待接入）。
+    符合 MarketStructureBrief 契约的完整 JSON：含 facts、inferences、assumptions、
+    liquidity_and_market_phase、key_drivers（≥3）、disclaimer；字段质量标准见各 Field description。
 
 task_fm_narrative:
   agent: narrative_analyst
   context:
     - task_fm_market
   description: |
-    在同一用户诉求与标的前提下（{{user_query}}，标的提示：{{symbol}}），结合上一任务《市场结构简报》，归纳公开叙事与信息源类型；无搜索工具时列出待检索关键词与渠道。
+    用户诉求：{{user_query}}，标的：{{symbol}}。
+    结合上游《市场结构简报》，交付 NarrativeBrief：归纳公开叙事、标注来源可信度与未证实传言。
   expected_output: |
-    Markdown《舆情与叙事摘要》，含官方/媒体/社区等标签；未证实信息单独标注。
+    符合 NarrativeBrief 契约的完整 JSON；无检索工具时填写 pending_search_keywords 与 pending_channels。
 
 task_fm_sentiment:
   agent: sentiment_analyst
@@ -28,9 +32,9 @@ task_fm_sentiment:
     - task_fm_market
     - task_fm_narrative
   description: |
-    基于市场简报与叙事摘要，从参与者情绪与行为维度给出评估；须写清指标/观察的失效条件；禁止喊单。
+    基于市场简报与叙事摘要，交付 SentimentAssessment：情绪与行为维度，每条信号须含失效条件。
   expected_output: |
-    Markdown《情绪与行为评估》，结构化分条，含风险提示。
+    符合 SentimentAssessment 契约的完整 JSON；signals 至少 2 条，禁止喊单式结论。
 
 task_fm_technical:
   agent: technical_analyst
@@ -38,9 +42,10 @@ task_fm_technical:
     - task_fm_market
     - task_fm_sentiment
   description: |
-    在用户诉求与标的前提下，给出技术分析框架或摘要；若无 OHLCV，仅输出所需参数清单与「待 K 线工具」说明，不虚构 K 线。
+    用户诉求：{{user_query}}，标的：{{symbol}}。
+    交付 TechnicalBrief：有 OHLCV 则写摘要；无数据则 data_status=待K线数据 并列出 missing_data_checklist。
   expected_output: |
-    Markdown《技术分析摘要》或《待数据的技术分析框架》。
+    符合 TechnicalBrief 契约的完整 JSON；禁止虚构 K 线或具体买卖点位。
 
 task_fm_bull:
   agent: bull_researcher
@@ -49,9 +54,9 @@ task_fm_bull:
     - task_fm_narrative
     - task_fm_technical
   description: |
-    构建看多论证：至少 3 条独立论据、可证伪条件、乐观偏差自检；与空头研究对称，以证据质量为准。
+    交付 BullResearchCase：至少 3 条独立 claims，每条含 evidence_to_check 与 invalidation_conditions。
   expected_output: |
-    Markdown《多头论证》。
+    符合 BullResearchCase 契约的完整 JSON；不做全局结论、不给具体买卖点。
 
 task_fm_bear:
   agent: bear_researcher
@@ -60,9 +65,9 @@ task_fm_bear:
     - task_fm_narrative
     - task_fm_technical
   description: |
-    构建风险与看空论证：至少 3 条独立论据，区分已发生/高概率/低概率高影响；拒绝无依据阴谋论。
+    交付 BearResearchCase：尾部风险与看空论证，区分证据强度，拒绝无依据阴谋论。
   expected_output: |
-    Markdown《空头与风险论证》。
+    符合 BearResearchCase 契约的完整 JSON；含 mitigation_conditions。
 
 task_fm_synthesis:
   agent: research_manager
@@ -74,18 +79,20 @@ task_fm_synthesis:
     - task_fm_bull
     - task_fm_bear
   description: |
-    整合前述各域产出，消除重复与矛盾，给出主结论与备选情景、信息缺口与下一步研究任务；证据不足时主结论可为「无法判定」。
+    整合各域产出，交付 ResearchSynthesis：主结论、分歧表、情景、信息缺口与下一步研究。
+    证据不足时 main_conclusion 可为「无法判定」。
   expected_output: |
-    Markdown《研究经理综合摘要》，含分歧表与置信度说明。
+    符合 ResearchSynthesis 契约的完整 JSON；含 disagreements、scenarios、information_gaps。
 
 task_fm_trading:
   agent: trader
   context:
     - task_fm_synthesis
   description: |
-    在研究经理综合摘要基础上，输出可讨论的交易思路：时间尺度、入场/风控/减仓的逻辑类型（非具体下单指令）、执行纪律；低置信度时输出观望与触发条件。
+    基于研究经理综合摘要，交付 TradingPlaybook：可讨论的交易思路类型（非下单指令）。
+    低置信时 stance=观望 并写清 watch_triggers。
   expected_output: |
-    Markdown《交易思路与风控检查清单》。强调模拟与回测优先；含高风险警示（杠杆/合约若相关）。
+    符合 TradingPlaybook 契约的完整 JSON；强调模拟与回测优先。
 
 task_fm_portfolio:
   agent: portfolio_manager
@@ -93,6 +100,6 @@ task_fm_portfolio:
     - task_fm_synthesis
     - task_fm_trading
   description: |
-    从组合视角给出集中度、相关性、风险预算与再平衡原则（定性）；承接非投资建议合规表述；结尾用单独一节「免责声明」。
+    交付 PortfolioBrief：组合视角的浓度、相关性、风险预算与再平衡原则；完整 disclaimer。
   expected_output: |
-    Markdown《组合视角与免责声明》终稿，作为整条研究链面向用户的最终交付物之一（可与前序章节合并阅读）。
+    符合 PortfolioBrief 契约的完整 JSON；作为研究链终稿章节之一。

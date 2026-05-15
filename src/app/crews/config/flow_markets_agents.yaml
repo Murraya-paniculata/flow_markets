@@ -1,7 +1,7 @@
 # FlowMarkets：交易研究 Crew 的 Agent 定义（Level 1 MVP：先定人，工具后续在 tasks/flow 中挂载）
 # 说明：原角色名「空投研究员」在交易语境下多与「空头研究员」混淆；此处按多空对称定义 bear_researcher。
 # 若业务需要「空投（Airdrop）」专题，可另增 airdrop_analyst 角色。
-# Agent 人设按 RGB：Goal=决策偏好；Backstory=心法与边界；具体交付格式见 flow_markets_tasks.yaml。
+# Agent 人设按 RGB：Goal=决策偏好；Backstory=心法与边界；Task 里程碑见 flow_markets_tasks.yaml，字段契约见 schemas/flow_markets_deliverables.py。
 
 market_analyst:
   role: 资深市场分析师

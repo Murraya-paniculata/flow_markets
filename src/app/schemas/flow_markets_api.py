@@ -1,4 +1,7 @@
-"""FlowMarkets API：请求/响应 Pydantic 模型（经 ApiResponse 统一出口）。"""
+"""FlowMarkets HTTP API：请求/响应 Pydantic 模型（经 ApiResponse 统一出口）。
+
+与 ``flow_markets_deliverables.py``（Crew 各 Task 结构化交付物）区分。
+"""
 
 from typing import Literal
 
