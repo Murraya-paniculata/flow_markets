@@ -3,21 +3,12 @@
 与 ``flow_markets_deliverables.py``（Crew 各 Task 结构化交付物）区分。
 """
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
 class FlowMarketsAnalyzeRequest(BaseModel):
     """交易研究链分析请求。"""
 
-    pipeline: Literal["yaml", "trading_agents"] = Field(
-        "yaml",
-        description=(
-            "编排管线：`yaml` 为现有 YAML+CrewBase 顺序链；`trading_agents` 为迁入的 "
-            "TradingAgents 风格（Python 任务 + 结构化 JSON + guardrail）。"
-        ),
-    )
     user_query: str = Field(
         ...,
         min_length=1,
@@ -33,19 +24,6 @@ class FlowMarketsAnalyzeRequest(BaseModel):
         None,
         max_length=1000,
         description="可选补充约束：时间尺度、风险偏好、是否含合约等。",
-    )
-    analysis_date: str | None = Field(
-        None,
-        max_length=32,
-        description="分析日期（YYYY-MM-DD）。`trading_agents` 管线使用；不传则服务端取当天。",
-    )
-    stage: str | None = Field(
-        None,
-        max_length=32,
-        description=(
-            "仅 `trading_agents`：执行阶段，覆盖环境变量 TA_STAGE。"
-            "如 analysis、debate、rm、trader、pm、full 等，见 trading_agents.tasks.slice_by_stage。"
-        ),
     )
 
 

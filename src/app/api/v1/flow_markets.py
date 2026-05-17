@@ -19,9 +19,8 @@ logger = get_logger(__name__)
     response_model=ApiResponse[FlowMarketsAnalyzeResponse],
     summary="FlowMarkets 交易研究分析",
     description=(
-        "同步执行多 Agent 研究链。`pipeline=yaml`：YAML 顺序链；"
-        "`pipeline=trading_agents`：TradingAgents 风格（新闻/多空结构化 JSON、guardrail）。"
-        "需配置 LLM API Key。可选环境变量 TA_STAGE、TA_VERBOSE、TA_INTERMEDIATE_TOOL、TA_LLM_TRACE。"
+        "同步执行多 Agent 研究链（YAML 顺序链 + output_pydantic 结构化输出）。"
+        "需配置 LLM API Key（如通义千问 qwen-max）。"
         "长链路可能耗时数分钟，生产环境建议后续改为异步任务 + 轮询（见设计文档）。"
     ),
 )
@@ -37,9 +36,6 @@ async def analyze(
             user_query=body.user_query,
             symbol=body.symbol,
             notes=body.notes,
-            pipeline=body.pipeline,
-            analysis_date=body.analysis_date,
-            stage=body.stage,
         )
     except Exception as e:
         logger.exception("flow_markets_api_failed", error=str(e))

@@ -6,7 +6,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
@@ -183,18 +183,9 @@ def run_flow_markets_analysis(
     user_query: str,
     symbol: str | None = None,
     notes: str | None = None,
-    *,
-    pipeline: str = "yaml",
-    analysis_date: str | None = None,
-    stage: str | None = None,
 ) -> tuple[str | None, str]:
     """
-    执行 FlowMarkets 顺序研究链。
-
-    Args:
-        pipeline: ``yaml``（默认）或 ``trading_agents``（结构化 JSON 管线）。
-        analysis_date: 仅 trading_agents；未传时默认当天本地日期（``YYYY-MM-DD``）。
-        stage: 仅 trading_agents；覆盖 TA_STAGE。
+    执行 FlowMarkets 顺序研究链（YAML Agent/Task + Task.output_pydantic）。
 
     Returns:
         (report_markdown, error_message)；成功时 error_message 为空字符串。
@@ -202,39 +193,6 @@ def run_flow_markets_analysis(
     settings = get_settings()
     if not (settings.llm_api_key or "").strip():
         return None, "未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型"
-
-    pl = (pipeline or "yaml").strip().lower()
-    if pl == "trading_agents":
-        try:
-            from app.crews.flows.trading_agents_flow import run_trading_agents_analysis
-        except ModuleNotFoundError:
-            return None, (
-                "trading_agents 管线未安装（缺少 app.crews.flows.trading_agents_flow），"
-                "请使用 pipeline=yaml 或补全该模块"
-            )
-        ticker = (symbol or "").strip() or "（未指定标的，请结合 user_query 理解）"
-        date_str = (analysis_date or "").strip() or datetime.now().strftime("%Y-%m-%d")
-        user_intent = user_query.strip()
-        if (notes or "").strip():
-            user_intent = f"{user_intent}\n补充说明：{notes.strip()}"
-        t0 = time.perf_counter()
-        logger.info("flow_markets_trading_agents_start", ticker_preview=ticker[:80])
-        report, err = run_trading_agents_analysis(
-            ticker,
-            date_str,
-            user_intent,
-            stage=stage,
-        )
-        elapsed = time.perf_counter() - t0
-        try:
-            crew_execution_seconds.labels(flow_name="trading_agents").observe(elapsed)
-        except Exception:
-            logger.warning("trading_agents_metrics_observe_failed", exc_info=True)
-        logger.info("flow_markets_trading_agents_done", elapsed_seconds=round(elapsed, 3))
-        return report, err
-
-    if pl != "yaml":
-        return None, f"不支持的 pipeline: {pipeline}，请使用 yaml 或 trading_agents"
 
     os.environ["CREWAI_TESTING"] = "true"
     inputs: dict[str, Any] = {
@@ -277,9 +235,6 @@ def analyze_flow_markets(
     *,
     symbol: str | None = None,
     notes: str | None = None,
-    pipeline: Literal["yaml", "trading_agents"] = "yaml",
-    analysis_date: str | None = None,
-    stage: str | None = None,
     output_path: str | Path | None = None,
     save_report: bool = False,
 ) -> tuple[str | None, str]:
@@ -292,8 +247,6 @@ def analyze_flow_markets(
         report, err = analyze_flow_markets(
             "研究 BTC 风险",
             symbol="BTC-USD",
-            pipeline="trading_agents",
-            stage="analysis",
             output_path="./data/report.md",
         )
 
@@ -304,9 +257,6 @@ def analyze_flow_markets(
         user_query=user_query,
         symbol=symbol,
         notes=notes,
-        pipeline=pipeline,
-        analysis_date=analysis_date,
-        stage=stage,
     )
     out: Path | None = Path(output_path) if output_path else None
     if not err and report and out is None and save_report:

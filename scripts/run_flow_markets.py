@@ -46,13 +46,6 @@ def main() -> int:
     parser.add_argument("--symbol", default="", help="标的或交易对")
     parser.add_argument("--notes", default="", help="补充说明")
     parser.add_argument(
-        "--pipeline",
-        choices=("yaml", "trading_agents"),
-        default=os.environ.get("FM_PIPELINE", "yaml"),
-    )
-    parser.add_argument("--analysis-date", default="")
-    parser.add_argument("--stage", default="")
-    parser.add_argument(
         "-o",
         "--output",
         default="",
@@ -91,10 +84,7 @@ def main() -> int:
             else flow_markets_report_path(_DEFAULT_OUTPUT_DIR)
         )
 
-    print(
-        f"FlowMarkets 开始：query={user_query!r} symbol={symbol!r} pipeline={args.pipeline}",
-        file=sys.stderr,
-    )
+    print(f"FlowMarkets 开始：query={user_query!r} symbol={symbol!r}", file=sys.stderr)
     if output_path:
         print(f"报告将写入：{output_path}", file=sys.stderr)
 
@@ -102,9 +92,6 @@ def main() -> int:
         user_query,
         symbol=symbol,
         notes=args.notes or None,
-        pipeline=args.pipeline,  # type: ignore[arg-type]
-        analysis_date=args.analysis_date or None,
-        stage=args.stage or None,
         output_path=output_path,
     )
 

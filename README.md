@@ -61,7 +61,7 @@ PYTHONPATH=src python -m app
 - 指标: `GET /metrics`
 - 示例接口: `GET /api/v1/demo/ping`（需请求头 `X-API-Key`，开发环境可不配置 APP_API_KEYS）
 - **Demo 深度调研**: `POST /api/v1/demo/deep-research`，请求体须为 JSON：必填 `topic`（非空字符串，1–500 字），可选 `extra_instructions`（字符串或 null）。需请求头 `Content-Type: application/json`、`X-API-Key`。返回 422 时查看响应 `detail` 定位校验错误。需配置 LLM + 百度搜索 API Key。
-- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`，JSON 必填 `user_query`，可选 `symbol`、`notes`；`**pipeline`**：`yaml`（默认，YAML+CrewBase 顺序链）或 `**trading_agents**`（Python 任务 + 结构化 JSON + guardrail，迁入自教学项目）。可选 `analysis_date`、`stage`（仅 `trading_agents`）。环境变量 `TA_STAGE`、`TA_VERBOSE`、`TA_INTERMEDIATE_TOOL`、`TA_LLM_TRACE` 见 `.env.example` 注释。
+- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`，JSON 必填 `user_query`，可选 `symbol`、`notes`；YAML+CrewBase 顺序链，各 Task 通过 `output_pydantic` 由 CrewAI 约束结构化输出（通义千问等模型）。
 
 ## 项目结构
 
