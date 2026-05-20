@@ -43,9 +43,12 @@ task_fm_technical:
     - task_fm_sentiment
   description: |
     用户诉求：{{user_query}}，标的：{{symbol}}。
-    交付 TechnicalBrief：有 OHLCV 则写摘要；无数据则 data_status=待K线数据 并列出 missing_data_checklist。
+    必须先调用工具 get_chan_structure：symbol 用 {{symbol}}（若为「未指定」则写待数据说明），timeframe 默认 1h，lookback 建议 300。
+    若返回 ok=true：依据 data 中 bi/segment/center/signal/structure_summary 撰写摘要，data_status=有足够K线；
+    引用 latest_price、ZG/ZD/GG/DD、price_position、strength_comparison、买卖点列表，并写失效条件。
+    若返回 ok=false：data_status=待K线数据，missing_data_checklist 列出 error_code 与修复建议；禁止手写笔/中枢图替代。
   expected_output: |
-    符合 TechnicalBrief 契约的完整 JSON；禁止虚构 K 线或具体买卖点位。
+    符合 TechnicalBrief 契约的完整 JSON；结构事实仅来自 get_chan_structure；禁止虚构 K 线或具体买卖点位。
 
 task_fm_bull:
   agent: bull_researcher

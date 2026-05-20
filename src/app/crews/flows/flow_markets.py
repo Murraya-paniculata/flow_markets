@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from crewai import Agent, Crew, Process, Task
-from crewai.project import CrewBase, agent, crew, task
+from crewai.project import CrewBase, agent, crew, task, tool
+from crewai.tools import BaseTool
 
 from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
@@ -25,6 +26,7 @@ from app.schemas.flow_markets_deliverables import (
     assemble_flow_markets_report,
 )
 from app.schemas.trading_agents import BearResearchCase, BullResearchCase
+from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
 
@@ -76,6 +78,10 @@ class FlowMarketsCrew:
 
     agents_config = str(_CONFIG_DIR / "flow_markets_agents.yaml")
     tasks_config = str(_CONFIG_DIR / "flow_markets_tasks.yaml")
+
+    @tool
+    def GetChanStructureTool(self) -> BaseTool:
+        return GetChanStructureToolImpl()
 
     @agent
     def market_analyst(self) -> Agent:
