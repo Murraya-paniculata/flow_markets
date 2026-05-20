@@ -73,8 +73,10 @@ src/app/
 ├── crews/            # agents、tasks、flows、tools、llm（CrewAI）
 ├── db/               # clients、models、migrations、repositories
 ├── schemas/          # Pydantic Request/Response/Domain
-├── services/         # 领域服务
-└── observability/    # 日志、指标
+├── services/chan/    # analyze / backend / chart / kline / types
+└── observability/
+chanpy/               # 内置 Vespa314/chan.py（仅计算与 Plot，无 Demo/Debug）
+scripts/demo_chan_chart.py
 tests/                # unit、integration
 deploy/               # docker、k8s、grafana
 ```
@@ -85,42 +87,64 @@ deploy/               # docker、k8s、grafana
 
 ### 上游 LLM（必填以使用 AI 编排）
 
-
-| 变量                                          | 说明                                       | 必填    | 获取方式                           |
-| ------------------------------------------- | ---------------------------------------- | ----- | ------------------------------ |
-| **APP_LLM_API_KEY**                         | 上游 API Key                               | **是** | 随 Provider 而定（见下行）             |
-| （备用）**QWEN_API_KEY** / **DEEPSEEK_API_KEY** | 未配置 `APP_LLM_API_KEY` 时的 fallback        | 否     | 与 DashScope / DeepSeek 控制台密钥一致 |
-| APP_LLM_PROVIDER                            | `aliyun`（通义千问）或 `**deepseek`**           | 否     | 默认 aliyun                      |
-| APP_LLM_MODEL                               | 如 `qwen-plus`；DeepSeek 如 `deepseek-chat` | 否     | 默认 qwen-plus                   |
-| APP_LLM_BASE_URL                            | DeepSeek 或兼容网关根 URL（可选）                  | 否     | 见 `.env.example`               |
-| APP_LLM_REGION                              | 仅阿里云：`cn` / `intl` / `finance`           | 否     | 默认 cn                          |
-| APP_LLM_TIMEOUT                             | 请求超时秒数                                   | 否     | 默认 600                         |
-
+| 变量                                            | 说明                                        | 必填   | 获取方式                               |
+| ----------------------------------------------- | ------------------------------------------- | ------ | -------------------------------------- |
+| **APP_LLM_API_KEY**                             | 上游 API Key                                | **是** | 随 Provider 而定（见下行）             |
+| （备用）**QWEN_API_KEY** / **DEEPSEEK_API_KEY** | 未配置 `APP_LLM_API_KEY` 时的 fallback      | 否     | 与 DashScope / DeepSeek 控制台密钥一致 |
+| APP_LLM_PROVIDER                                | `aliyun`（通义千问）或 `**deepseek`\*\*     | 否     | 默认 aliyun                            |
+| APP_LLM_MODEL                                   | 如 `qwen-plus`；DeepSeek 如 `deepseek-chat` | 否     | 默认 qwen-plus                         |
+| APP_LLM_BASE_URL                                | DeepSeek 或兼容网关根 URL（可选）           | 否     | 见 `.env.example`                      |
+| APP_LLM_REGION                                  | 仅阿里云：`cn` / `intl` / `finance`         | 否     | 默认 cn                                |
+| APP_LLM_TIMEOUT                                 | 请求超时秒数                                | 否     | 默认 600                               |
 
 阿里云 Key 获取：[阿里云百炼 / 灵积控制台](https://dashscope.console.aliyun.com/)。DeepSeek：[DeepSeek 开放平台](https://platform.deepseek.com/)。
 
 ### 百度千帆搜索（百度搜索工具，使用搜索时必填）
 
-
-| 变量                                         | 说明                      | 必填              | 获取方式                                                                |
-| ------------------------------------------ | ----------------------- | --------------- | ------------------------------------------------------------------- |
+| 变量                                          | 说明                        | 必填                       | 获取方式                                                                            |
+| --------------------------------------------- | --------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
 | **APP_BAIDU_API_KEY**（或 **BAIDU_API_KEY**） | 百度千帆 AppBuilder API Key | **使用百度搜索工具时必填** | [百度智能云千帆控制台](https://console.bce.baidu.com/qianfan/) 创建应用获取 API Key |
-| APP_BAIDU_SEARCH_TIMEOUT                   | 搜索请求超时秒数                | 否               | 默认 30                                                               |
-
+| APP_BAIDU_SEARCH_TIMEOUT                      | 搜索请求超时秒数            | 否                         | 默认 30                                                                             |
 
 ### 其他常用配置
 
-
-| 变量               | 说明                                 | 必填     |
-| ---------------- | ---------------------------------- | ------ |
-| APP_ENV          | development / staging / production | 否      |
-| APP_LOG_LEVEL    | DEBUG / INFO / WARNING / ERROR     | 否      |
-| APP_DATABASE_URL | 数据库连接串                             | 生产必填   |
-| APP_SECRET_KEY   | 签名/会话密钥                            | 生产必填   |
-| APP_API_KEYS     | 合法 API Key，逗号分隔                    | 生产建议配置 |
-
+| 变量             | 说明                               | 必填         |
+| ---------------- | ---------------------------------- | ------------ |
+| APP_ENV          | development / staging / production | 否           |
+| APP_LOG_LEVEL    | DEBUG / INFO / WARNING / ERROR     | 否           |
+| APP_DATABASE_URL | 数据库连接串                       | 生产必填     |
+| APP_SECRET_KEY   | 签名/会话密钥                      | 生产必填     |
+| APP_API_KEYS     | 合法 API Key，逗号分隔             | 生产建议配置 |
 
 完整项见 `.env.example`。
+
+### 缠论（chanpy）
+
+引擎在 **`chanpy/`**（[Vespa314/chan.py](https://github.com/Vespa314/chan.py) vendoring）。业务代码在 **`src/app/services/chan/`**。
+
+| 文件         | 作用                                 |
+| ------------ | ------------------------------------ |
+| `analyze.py` | API 入口 `build_kline_chart_payload` |
+| `backend.py` | chanpy 计算与结构转换                |
+| `chart.py`   | 结构 → 前端 JSON                     |
+| `kline.py`   | Binance + 北京时间聚合               |
+
+可选 `APP_CHANPY_ROOT` 覆盖内置 chanpy 路径。
+
+**API**：`GET /api/v1/chan/kline/{symbol}/{interval}?limit=350`（需 `X-API-Key`）
+
+返回字段与 chanlun 图表对齐：`klines`、`merged_klines`、`bi`、`xd`、`zs`、`fx`、`bsp`，`meta.engine` 为 `chanpy`。
+
+**本地验图**（与 `chan.py/demo_btcusdt.py` 同类，输出 PNG）：
+
+```bash
+uv sync --extra chart
+uv run python scripts/demo_chan_chart.py
+# 图片: output/chan_charts/btcusdt_1d_chan.png
+
+# 与 API 相同 K 线（北京时间 5m 聚合）:
+CHAN_USE_BEIJING=1 CHAN_INTERVAL=1d uv run python scripts/demo_chan_chart.py
+```
 
 ## 测试
 

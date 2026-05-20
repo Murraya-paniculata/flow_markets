@@ -37,6 +37,9 @@ htmlcov/
 *.swp
 *.swo
 
+# 缠论验图输出
+output/
+
 # 数据与日志（不提交到 git）
 data/
 log/

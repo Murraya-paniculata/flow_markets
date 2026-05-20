@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # 深度调研 Demo：报告输出根目录（每次运行会在其下创建子目录）
     deep_research_output_dir: str = "./data/deep_research"
 
+    # 缠论 chanpy 根目录（可选；默认使用仓库内 flow_markets/chanpy/）
+    chanpy_root: str = ""
+
     @model_validator(mode="before")
     @classmethod
     def fallback_api_keys_from_env(cls, data: Any) -> Any:
