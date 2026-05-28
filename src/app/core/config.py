@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # 缠论结构引擎根目录（可选；默认使用仓库内 vendored 计算库）
     chan_engine_root: str = ""
 
+    # 分析记忆库（快照 / outcome）；与 APP_DATABASE_URL 独立，默认本地 SQLite
+    analysis_db_url: str = "sqlite:///./data/analysis.db"
+
     @model_validator(mode="before")
     @classmethod
     def fallback_api_keys_from_env(cls, data: Any) -> Any:
