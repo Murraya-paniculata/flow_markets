@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .divergence import attach_bcs_from_engine_bsp, attach_strength_divergences
+from .macd_strength import attach_bi_macd_strength
 from .types import (
     MergedKline,
     SimpleBi,
@@ -451,6 +452,7 @@ class ChanEngineICL:
             for i, z in enumerate(kl_data.zs_list.zs_lst)
             if i < len(self._bi_zss)
         }
+        attach_bi_macd_strength(self._raw_df, self._bis, merged_by_idx)
         _attach_bsp_mmds(kl_data, self._bis, self._xds, zs_map, BSP_TYPE)
         attach_bcs_from_engine_bsp(
             kl_data,
