@@ -146,6 +146,24 @@ uv run python scripts/demo_chan_chart.py
 CHAN_USE_BEIJING=1 CHAN_INTERVAL=1d uv run python scripts/demo_chan_chart.py
 ```
 
+**缠论 AI 分析 CLI**（用法对齐 chanlun 的 `chanlun_ai.py`；终端输出「结构快览 + 交易者可读 AI 报告」）：
+
+```bash
+# 与 chanlun 同类命令（--table 为习惯参数，输出 chanlun 风格块）
+FM_CHAN_PROGRESS=1 uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200
+
+# 或项目根入口
+uv run python flow_markets_ai.py BTCUSDT 1h --table --limit 200
+
+# 仅结构、不调 LLM
+uv run python scripts/flow_markets_ai.py BTCUSDT 1h --no-ai --limit 200
+
+# 保存 output/{symbol}_{interval}_{时间}_structure.json / _analysis.json / _report.txt
+uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200 --save
+```
+
+需 `.env` 中配置 **APP_LLM_API_KEY**（`--table` 全分析时）。等价细粒度脚本：`scripts/run_technical_analyst.py`、`scripts/run_get_chan_structure.py`。
+
 ## 测试
 
 ```bash
