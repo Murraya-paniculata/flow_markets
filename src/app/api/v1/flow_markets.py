@@ -36,6 +36,7 @@ async def analyze(
             user_query=body.user_query,
             symbol=body.symbol,
             notes=body.notes,
+            save=body.save,
         )
     except Exception as e:
         logger.exception("flow_markets_api_failed", error=str(e))

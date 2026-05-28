@@ -70,7 +70,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         action="store_true",
-        help="保存到 output/：结构 JSON、分析 JSON、终端文案 .txt",
+        help="保存到 output/（结构+分析 JSON）并写入分析记忆库 APP_ANALYSIS_DB_URL",
     )
     parser.add_argument(
         "--user-query",
@@ -157,6 +157,7 @@ def main() -> int:
         notes=f"flow_markets_ai.py --table --limit {lookback}",
         timeframe=interval,
         lookback=lookback,
+        save=args.save,
     )
     if err:
         print(f"   ✗ {err}", file=sys.stderr)

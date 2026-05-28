@@ -9,6 +9,11 @@ from app.analysis_store.db_manager import (
     safe_json_dumps,
     safe_json_loads,
 )
+from app.analysis_store.persist import (
+    save_analysis_run,
+    save_technical_deliverable,
+    should_persist_analysis,
+)
 
 __all__ = [
     "get_db_conn",
@@ -18,4 +23,7 @@ __all__ = [
     "resolve_analysis_db_path",
     "safe_json_dumps",
     "safe_json_loads",
+    "save_analysis_run",
+    "save_technical_deliverable",
+    "should_persist_analysis",
 ]

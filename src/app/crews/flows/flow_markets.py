@@ -15,6 +15,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task, tool
 from crewai.tools import BaseTool
 
+from app.analysis_store import save_technical_deliverable, should_persist_analysis
 from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
 from app.crews.llm import get_llm
@@ -163,6 +164,46 @@ class FlowMarketsCrew:
         )
 
 
+def _extract_technical_deliverable(
+    result: Any,
+) -> TechnicalAnalysisDeliverable | dict[str, Any] | None:
+    """从 Crew kickoff 结果解析 TechnicalAnalysisDeliverable。"""
+    pydantic_out = getattr(result, "pydantic", None)
+    if pydantic_out is not None:
+        return pydantic_out
+
+    tasks_out = getattr(result, "tasks_output", None) or []
+    for out in reversed(tasks_out):
+        p = getattr(out, "pydantic", None)
+        if p is not None:
+            return p
+
+    raw = getattr(result, "raw", None)
+    if raw:
+        return {"raw": str(raw)}
+    return None
+
+
+def _maybe_persist_technical_deliverable(
+    deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
+    *,
+    timeframe: str,
+    lookback: int,
+    symbol_hint: str | None,
+    save: bool | None,
+) -> int | None:
+    if not should_persist_analysis(save=save):
+        return None
+    if not isinstance(deliverable, TechnicalAnalysisDeliverable):
+        return None
+    return save_technical_deliverable(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+
+
 def _standalone_technical_task(
     flow: FlowMarketsCrew,
     *,
@@ -186,6 +227,7 @@ def run_technical_analyst_only(
     *,
     timeframe: str = "1h",
     lookback: int = 300,
+    save: bool | None = None,
 ) -> tuple[TechnicalAnalysisDeliverable | dict[str, Any] | None, str]:
     """
     仅运行技术分析师（Tool + Skill → TechnicalAnalysisDeliverable）。
@@ -227,19 +269,18 @@ def run_technical_analyst_only(
             elapsed_seconds=round(time.perf_counter() - t0, 3),
         )
 
-    pydantic_out = getattr(result, "pydantic", None)
-    if pydantic_out is not None:
-        return pydantic_out, ""
-
-    tasks_out = getattr(result, "tasks_output", None) or []
-    for out in reversed(tasks_out):
-        p = getattr(out, "pydantic", None)
-        if p is not None:
-            return p, ""
-
-    raw = getattr(result, "raw", None)
-    if raw:
-        return {"raw": str(raw)}, "未解析到 TechnicalAnalysisDeliverable，见 raw 字段"
+    deliverable = _extract_technical_deliverable(result)
+    _maybe_persist_technical_deliverable(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol,
+        save=save,
+    )
+    if deliverable is not None:
+        if isinstance(deliverable, TechnicalAnalysisDeliverable):
+            return deliverable, ""
+        return deliverable, "未解析到 TechnicalAnalysisDeliverable，见 raw 字段"
     return None, "未解析到 TechnicalAnalysisDeliverable 输出"
 
 
@@ -250,6 +291,7 @@ def run_flow_markets_analysis(
     *,
     timeframe: str = "1h",
     lookback: int = 300,
+    save: bool | None = None,
 ) -> tuple[str | None, str]:
     """
     执行 FlowMarkets 编排（当前等同 technical_analyst 单链）。
@@ -293,6 +335,15 @@ def run_flow_markets_analysis(
             logger.warning("flow_markets_metrics_observe_failed", exc_info=True)
         logger.info("flow_markets_done", elapsed_seconds=round(elapsed, 3))
 
+    deliverable = _extract_technical_deliverable(result)
+    _maybe_persist_technical_deliverable(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol,
+        save=save,
+    )
+
     report = assemble_flow_markets_report(
         result,
         user_query=inputs["user_query"],
@@ -312,6 +363,7 @@ def analyze_flow_markets(
     notes: str | None = None,
     output_path: str | Path | None = None,
     save_report: bool = False,
+    save: bool | None = None,
 ) -> tuple[str | None, str]:
     """
     便捷入口：仅必填 ``user_query``，其余可选；可顺带写入 Markdown 报告文件。
@@ -328,10 +380,12 @@ def analyze_flow_markets(
     Returns:
         (report_markdown, error_message)；成功时 error_message 为空。
     """
+    persist = save if save is not None else save_report
     report, err = run_flow_markets_analysis(
         user_query=user_query,
         symbol=symbol,
         notes=notes,
+        save=persist,
     )
     out: Path | None = Path(output_path) if output_path else None
     if not err and report and out is None and save_report:

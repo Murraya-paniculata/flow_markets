@@ -25,6 +25,10 @@ class FlowMarketsAnalyzeRequest(BaseModel):
         max_length=1000,
         description="可选补充约束：时间尺度、风险偏好、是否含合约等。",
     )
+    save: bool = Field(
+        False,
+        description="为 true 时在分析成功后写入分析记忆库（analysis_snapshot）；亦受 APP_ANALYSIS_SAVE 影响。",
+    )
 
 
 class FlowMarketsAnalyzeResponse(BaseModel):

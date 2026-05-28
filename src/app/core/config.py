@@ -57,6 +57,8 @@ class Settings(BaseSettings):
 
     # 分析记忆库（快照 / outcome）；与 APP_DATABASE_URL 独立，默认本地 SQLite
     analysis_db_url: str = "sqlite:///./data/analysis.db"
+    # technical 成功后是否默认写入分析库（CLI --save / API save=true 可单独开启）
+    analysis_save: bool = False
 
     @model_validator(mode="before")
     @classmethod
