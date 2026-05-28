@@ -44,8 +44,10 @@ class ChanBiItem(BaseModel):
     end_price: float | None = None
     buy_sell_point: str | None = None
     divergence: str | None = None
+    strength: float | None = Field(None, description="综合力度（与 chanlun exporter 一致，有则导出）")
+    macd_strength: float | None = Field(None, description="MACD 力度（有则导出）")
     price_strength: float | None = Field(
-        None, description="笔的价格幅度代理（|end-start|），非 MACD 力度"
+        None, description="价格幅度力度（|end-start| 或引擎 price_strength）"
     )
 
 
@@ -75,6 +77,7 @@ class ChanCenterItem(BaseModel):
     low: float | None = None
     relation: str = "new"
     bi_count: int = 0
+    level: int | None = Field(1, description="中枢级别（与 chanlun exporter 一致）")
 
 
 class ChanSignal(BaseModel):

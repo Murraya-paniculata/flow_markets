@@ -271,6 +271,8 @@ def _convert_zs(
     zs.start_merged_idx = begin_mi if begin_mi is not None else int(czs.begin_bi.idx)
     zs.end_merged_idx = end_mi if end_mi is not None else int(czs.end_bi.idx)
     zs.is_sure = bool(getattr(czs, "is_sure", True))
+    zs.high = float(zs.zg)
+    zs.low = float(zs.zd)
     return zs
 
 
@@ -312,6 +314,18 @@ def _convert_bi(cbi: Any, merged_by_idx: Dict[int, MergedKline], FX_TYPE: Any) -
         end_index=end_klc.idx,
         is_done=cbi.is_sure,
     )
+    try:
+        bi.high = float(cbi._high())
+        bi.low = float(cbi._low())
+    except Exception:
+        pass
+    try:
+        amp = float(cbi.amp())
+        bi.price_strength = round(amp, 2)
+        bi.strength = round(amp, 2)
+    except Exception:
+        bi.price_strength = round(abs(bi.end_price - bi.start_price), 2)
+        bi.strength = bi.price_strength
     return bi
 
 

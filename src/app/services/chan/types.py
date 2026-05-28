@@ -67,6 +67,11 @@ class SimpleBi:
         self.end_time = end_fx.time
         self.start_price = float(start_fx.val)
         self.end_price = float(end_fx.val)
+        self.high = max(float(start_fx.val), float(end_fx.val))
+        self.low = min(float(start_fx.val), float(end_fx.val))
+        self.strength: float = 0.0
+        self.macd_strength: float = 0.0
+        self.price_strength: float = 0.0
         self.mmds: List[Any] = []
         self.bcs: List[Any] = []
 
@@ -127,6 +132,7 @@ class SimpleZS:
         self.dd = dd
         self.relation = relation
         self.bi_count = bi_count
+        self.level = 1
         self.is_sure = True
         self.start_merged_idx: int | None = None
         self.end_merged_idx: int | None = None

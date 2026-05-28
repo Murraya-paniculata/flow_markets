@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-本地命令行：不启动 HTTP，直接跑 FlowMarkets 编排。
+本地命令行：不启动 HTTP，直接跑 FlowMarkets（当前仅 technical_analyst）。
 
 零参数即可运行（使用内置默认或环境变量 FM_USER_QUERY / FM_SYMBOL / FM_OUTPUT）::
 
@@ -38,7 +38,7 @@ def main() -> int:
     _bootstrap()
 
     parser = argparse.ArgumentParser(
-        description="FlowMarkets：命令行跑研究编排（无参数时使用默认 BTC 研究主题）",
+        description="FlowMarkets：命令行跑技术分析师（无参数时使用默认 BTC 研究主题）",
     )
     parser.add_argument("query", nargs="?", default="", help="研究问题（可选）")
     parser.add_argument("symbol_pos", nargs="?", default="", help="标的（可选）")
@@ -84,7 +84,6 @@ def main() -> int:
             else flow_markets_report_path(_DEFAULT_OUTPUT_DIR)
         )
 
-    print(f"FlowMarkets 开始：query={user_query!r} symbol={symbol!r}", file=sys.stderr)
     if output_path:
         print(f"报告将写入：{output_path}", file=sys.stderr)
 

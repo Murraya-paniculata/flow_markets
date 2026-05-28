@@ -1,108 +1,102 @@
-# FlowMarkets：顺序研究链（Sequential）
-# 占位符：{{user_query}}、{{symbol}}、{{notes}}
-# 结构化交付契约见 app/schemas/flow_markets_deliverables.py（output_pydantic 注入 JSON Schema）
+# FlowMarkets 任务定义
+# 当前阶段：仅启用 task_fm_technical（无上游 context），其余任务已注释。
 
-task_fm_market:
-  agent: market_analyst
-  context: []
-  description: |
-    用户诉求：{{user_query}}
-    标的提示（可为空）：{{symbol}}
-    补充说明：{{notes}}
-
-    交付里程碑：完成《市场结构简报》结构化输出（MarketStructureBrief）。
-    聚焦宏观与流动性结构；无行情工具时不编造价格/成交量，缺数据处明确标注。
-  expected_output: |
-    符合 MarketStructureBrief 契约的完整 JSON：含 facts、inferences、assumptions、
-    liquidity_and_market_phase、key_drivers（≥3）、disclaimer；字段质量标准见各 Field description。
-
-task_fm_narrative:
-  agent: narrative_analyst
-  context:
-    - task_fm_market
-  description: |
-    用户诉求：{{user_query}}，标的：{{symbol}}。
-    结合上游《市场结构简报》，交付 NarrativeBrief：归纳公开叙事、标注来源可信度与未证实传言。
-  expected_output: |
-    符合 NarrativeBrief 契约的完整 JSON；无检索工具时填写 pending_search_keywords 与 pending_channels。
-
-task_fm_sentiment:
-  agent: sentiment_analyst
-  context:
-    - task_fm_market
-    - task_fm_narrative
-  description: |
-    基于市场简报与叙事摘要，交付 SentimentAssessment：情绪与行为维度，每条信号须含失效条件。
-  expected_output: |
-    符合 SentimentAssessment 契约的完整 JSON；signals 至少 2 条，禁止喊单式结论。
+# --- 暂停 ---
+# task_fm_market:
+#   agent: market_analyst
+#   context: []
+#   description: |
+#     用户诉求：{{user_query}}
+#     标的提示（可为空）：{{symbol}}
+#     补充说明：{{notes}}
+#     交付里程碑：完成《市场结构简报》结构化输出（MarketStructureBrief）。
+#     聚焦宏观与流动性结构；无行情工具时不编造价格/成交量，缺数据处明确标注。
+#   expected_output: |
+#     符合 MarketStructureBrief 契约的完整 JSON：含 facts、inferences、assumptions、
+#     liquidity_and_market_phase、key_drivers（≥3）、disclaimer；字段质量标准见各 Field description。
+#
+# task_fm_narrative:
+#   agent: narrative_analyst
+#   context:
+#     - task_fm_market
+#   description: |
+#     用户诉求：{{user_query}}，标的：{{symbol}}。
+#     结合上游《市场结构简报》，交付 NarrativeBrief：归纳公开叙事、标注来源可信度与未证实传言。
+#   expected_output: |
+#     符合 NarrativeBrief 契约的完整 JSON；无检索工具时填写 pending_search_keywords 与 pending_channels。
+#
+# task_fm_sentiment:
+#   agent: sentiment_analyst
+#   context:
+#     - task_fm_market
+#     - task_fm_narrative
+#   description: |
+#     基于市场简报与叙事摘要，交付 SentimentAssessment：情绪与行为维度，每条信号须含失效条件。
+#   expected_output: |
+#     符合 SentimentAssessment 契约的完整 JSON；signals 至少 2 条，禁止喊单式结论。
 
 task_fm_technical:
   agent: technical_analyst
-  context:
-    - task_fm_market
-    - task_fm_sentiment
+  context: []
   description: |
-    用户诉求：{{user_query}}，标的：{{symbol}}。
-    必须先调用工具 get_chan_structure：symbol 用 {{symbol}}（若为「未指定」则写待数据说明），timeframe 默认 1h，lookback 建议 300。
-    若返回 ok=true：依据 data 中 bi/segment/center/signal/structure_summary 撰写摘要，data_status=有足够K线；
-    引用 latest_price、ZG/ZD/GG/DD、price_position、strength_comparison、买卖点列表，并写失效条件。
-    若返回 ok=false：data_status=待K线数据，missing_data_checklist 列出 error_code 与修复建议；禁止手写笔/中枢图替代。
-  expected_output: |
-    符合 TechnicalBrief 契约的完整 JSON；结构事实仅来自 get_chan_structure；禁止虚构 K 线或具体买卖点位。
+    用户诉求：{{user_query}}，标的：{{symbol}}，补充：{{notes}}。
 
-task_fm_bull:
-  agent: bull_researcher
-  context:
-    - task_fm_market
-    - task_fm_narrative
-    - task_fm_technical
-  description: |
-    交付 BullResearchCase：至少 3 条独立 claims，每条含 evidence_to_check 与 invalidation_conditions。
-  expected_output: |
-    符合 BullResearchCase 契约的完整 JSON；不做全局结论、不给具体买卖点。
+    执行顺序（必须遵守，单 Task 内完成）：
+    1. 先调用工具 get_chan_structure：symbol={{symbol}}（若为「未指定」则仍调用并在摘要中说明），
+       timeframe=1h，lookback=300。在得到工具返回前不要撰写最终 JSON。
+    2. 工具返回后，按已注入的 chan-analysis Skill 解读 JSON（只分析 ok=true 时的 data；
+       ok=false 时按 Skill 声明数据不可用，不得编造笔/中枢）。
+    3. 一次输出 TechnicalAnalysisDeliverable（顶层两个字段，勿拆成两次回答）：
 
-task_fm_bear:
-  agent: bear_researcher
-  context:
-    - task_fm_market
-    - task_fm_narrative
-    - task_fm_technical
-  description: |
-    交付 BearResearchCase：尾部风险与看空论证，区分证据强度，拒绝无依据阴谋论。
-  expected_output: |
-    符合 BearResearchCase 契约的完整 JSON；含 mitigation_conditions。
+    【A】brief（TechnicalBrief，给 FlowMarkets 研究链）
+    - ok=true：data_status=有足够K线；structure_quickview=结构事实；summary=推断与失效条件（≥2条）
+    - ok=false：data_status=待K线数据；structure_quickview 留空；missing_data_checklist 含 error_code/hint
 
-task_fm_synthesis:
-  agent: research_manager
-  context:
-    - task_fm_market
-    - task_fm_narrative
-    - task_fm_sentiment
-    - task_fm_technical
-    - task_fm_bull
-    - task_fm_bear
-  description: |
-    整合各域产出，交付 ResearchSynthesis：主结论、分歧表、情景、信息缺口与下一步研究。
-    证据不足时 main_conclusion 可为「无法判定」。
-  expected_output: |
-    符合 ResearchSynthesis 契约的完整 JSON；含 disagreements、scenarios、information_gaps。
+    【B】chanlun_v2（ok=true 时必填，对齐 chanlun state_machine v2.0）
+    - version=2.0，output_mode=state_machine
+    - meta：symbol/interval/price/timestamp 来自工具 data
+    - state_machine.current_state：STRATEGY_ACTIVE | WAIT_CONFIRMATION | OBSERVE_ONLY 之一
+    - state_machine.active_strategy：direction(up/down)、status(WAIT/READY/ACTIVE/INVALIDATED)、
+      entry_gate(price_zone 两数、structure_required 非空缠论条件列表)、
+      execution(entry_type、stop_loss、target、rr)
+    - state_machine.invalidation：invalidate_active_if 至少 1 条；next_state
+    - structure_judgement：trend、price_position、zs(zg/zd/gg/dd)
+    - risk_notes：风险提示数组
+    - brief 与 chanlun_v2 结论须一致，不得矛盾
+    - ok=false 时 chanlun_v2=null
 
-task_fm_trading:
-  agent: trader
-  context:
-    - task_fm_synthesis
-  description: |
-    基于研究经理综合摘要，交付 TradingPlaybook：可讨论的交易思路类型（非下单指令）。
-    低置信时 stance=观望 并写清 watch_triggers。
+    历史胜率降级（若有 stats 上下文）：胜率<25%→OBSERVE_ONLY；25–35%→WAIT_CONFIRMATION；>35%→STRATEGY_ACTIVE。
   expected_output: |
-    符合 TradingPlaybook 契约的完整 JSON；强调模拟与回测优先。
+    符合 TechnicalAnalysisDeliverable 的单一 JSON：含 brief 与 chanlun_v2（或 null）。
+    结构事实仅来自 get_chan_structure；禁止虚构 K 线、笔、中枢或具体买卖点位。
 
-task_fm_portfolio:
-  agent: portfolio_manager
-  context:
-    - task_fm_synthesis
-    - task_fm_trading
-  description: |
-    交付 PortfolioBrief：组合视角的浓度、相关性、风险预算与再平衡原则；完整 disclaimer。
-  expected_output: |
-    符合 PortfolioBrief 契约的完整 JSON；作为研究链终稿章节之一。
+# task_fm_synthesis:
+#   agent: research_manager
+#   context:
+#     - task_fm_market
+#     - task_fm_narrative
+#     - task_fm_sentiment
+#     - task_fm_technical
+#   description: |
+#     整合市场、舆情、情绪、技术四域产出，交付 ResearchSynthesis：主结论、分歧表、情景、信息缺口与下一步研究。
+#   expected_output: |
+#     符合 ResearchSynthesis 契约的完整 JSON；含 disagreements、scenarios、information_gaps。
+#
+# task_fm_trading:
+#   agent: trader
+#   context:
+#     - task_fm_synthesis
+#   description: |
+#     基于研究经理综合摘要，交付 TradingPlaybook：可讨论的交易思路类型（非下单指令）。
+#   expected_output: |
+#     符合 TradingPlaybook 契约的完整 JSON；强调模拟与回测优先。
+#
+# task_fm_portfolio:
+#   agent: portfolio_manager
+#   context:
+#     - task_fm_synthesis
+#     - task_fm_trading
+#   description: |
+#     交付 PortfolioBrief：组合视角的浓度、相关性、风险预算与再平衡原则；完整 disclaimer。
+#   expected_output: |
+#     符合 PortfolioBrief 契约的完整 JSON；作为研究链终稿章节之一。

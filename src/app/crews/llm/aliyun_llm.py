@@ -54,6 +54,5 @@ class AliyunLLM(OpenAICompatChatLLM):
             missing_key_message=(
                 "阿里云 API Key 未配置。请设置环境变量 APP_LLM_API_KEY 或在构造时传入 api_key"
             ),
-            request_log_extra={"region": region},
         )
         self.region = region

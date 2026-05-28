@@ -35,5 +35,4 @@ class DeepSeekLLM(OpenAICompatChatLLM):
                 "DeepSeek API Key 未配置。请设置 APP_LLM_API_KEY（或 DEEPSEEK_API_KEY）"
                 " 或在构造时传入 api_key"
             ),
-            request_log_extra={"provider": "deepseek"},
         )

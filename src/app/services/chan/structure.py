@@ -1,8 +1,8 @@
-"""缠论结构快照：K 线 → chanpy → 裁剪 JSON（供 Agent 工具与 API 共用）。"""
+"""缠论结构快照：K 线 → chanpy → 裁剪 JSON（与 chanlun ChanlunAIExporter 对齐）。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import List
 
 from app.schemas.chan_structure import (
     ChanBiItem,
@@ -25,7 +25,6 @@ from app.services.chan.types import SimpleBi, SimpleMMD, SimpleXD, SimpleZS
 DEFAULT_LOOKBACK = 300
 DEFAULT_MAX_BI = 15
 DEFAULT_MAX_SEGMENT = 5
-DEFAULT_MAX_CENTER = 8
 MIN_KLINES = 50
 
 
@@ -42,7 +41,7 @@ def _normalize_symbol(symbol: str) -> tuple[str, str]:
     return raw, display
 
 
-def _dt_iso(dt: Any) -> str:
+def _dt_iso(dt) -> str:
     if dt is None:
         return ""
     if hasattr(dt, "isoformat"):
@@ -50,14 +49,9 @@ def _dt_iso(dt: Any) -> str:
     return str(dt)
 
 
-def _bi_price_strength(bi: SimpleBi) -> float:
-    return round(abs(float(bi.end_price) - float(bi.start_price)), 2)
-
-
 def _collect_signals(icl: ChanpyICL) -> ChanSignal:
     buy_sell: list[str] = []
     divergences: list[str] = []
-    last_time: Optional[str] = None
 
     for bi in icl.get_bis():
         for mmd in bi.mmds or []:
@@ -75,14 +69,16 @@ def _collect_signals(icl: ChanpyICL) -> ChanSignal:
             name = getattr(mmd, "name", None)
             if name:
                 buy_sell.append(str(name))
-
-    if icl.get_bis():
-        last_time = _dt_iso(icl.get_bis()[-1].end_time)
+        for bc in xd.bcs or []:
+            if getattr(bc, "bc", False):
+                t = getattr(bc, "type", "")
+                if t:
+                    divergences.append(str(t))
 
     return ChanSignal(
         buy_sell_points=sorted(set(buy_sell)),
         divergences=sorted(set(divergences)),
-        last_signal_time=last_time or None,
+        last_signal_time=None,
     )
 
 
@@ -94,23 +90,28 @@ def _bi_item(bi: SimpleBi) -> ChanBiItem:
         if getattr(bc, "bc", False):
             div = getattr(bc, "type", None)
             break
-    return ChanBiItem(
+
+    kwargs = dict(
         index=int(bi.index),
         direction=str(bi.type),
-        is_done=bool(bi.is_done()),
+        is_done=True,
         start_time=_dt_iso(bi.start_time) or None,
         end_time=_dt_iso(bi.end_time) or None,
         start_price=float(bi.start_price),
         end_price=float(bi.end_price),
         buy_sell_point=buy_sell,
         divergence=str(div) if div else None,
-        price_strength=_bi_price_strength(bi),
     )
+    if getattr(bi, "strength", 0):
+        kwargs["strength"] = round(float(bi.strength), 2)
+    if getattr(bi, "macd_strength", 0):
+        kwargs["macd_strength"] = round(float(bi.macd_strength), 2)
+    if getattr(bi, "price_strength", 0):
+        kwargs["price_strength"] = round(float(bi.price_strength), 2)
+    return ChanBiItem(**kwargs)
 
 
 def _segment_item(xd: SimpleXD) -> ChanSegmentItem:
-    mmds = xd.mmds or []
-    buy_sell = getattr(mmds[-1], "name", None) if mmds else None
     div = None
     for bc in xd.bcs or []:
         if getattr(bc, "bc", False):
@@ -119,12 +120,12 @@ def _segment_item(xd: SimpleXD) -> ChanSegmentItem:
     return ChanSegmentItem(
         index=int(xd.index),
         direction=str(xd.type),
-        is_done=bool(xd.is_done()),
+        is_done=True,
         start_time=_dt_iso(xd.start_time) or None,
         end_time=_dt_iso(xd.end_time) or None,
         start_price=float(xd.start_price),
         end_price=float(xd.end_price),
-        buy_sell_point=buy_sell,
+        buy_sell_point=None,
         divergence=str(div) if div else None,
     )
 
@@ -140,25 +141,33 @@ def _center_item(zs: SimpleZS, zs_kind: str) -> ChanCenterItem:
         zd=float(zs.zd),
         gg=float(zs.gg),
         dd=float(zs.dd),
-        high=float(zs.zg),
-        low=float(zs.zd),
+        high=float(getattr(zs, "high", zs.zg)),
+        low=float(getattr(zs, "low", zs.zd)),
+        level=int(getattr(zs, "level", 1)),
         relation=str(getattr(zs, "relation", "new")),
         bi_count=int(getattr(zs, "bi_count", 0)),
     )
+
+
+def _count_centers(icl: ChanpyICL) -> int:
+    n = len(icl.get_bi_zss())
+    n += len(icl.get_xd_zss())
+    return n
 
 
 def _build_structure_summary(
     icl: ChanpyICL,
     latest_price: float,
 ) -> ChanStructureSummary:
+    """与 chanlun/chanlun_ai_exporter._build_structure_summary 逻辑一致。"""
     bis = icl.get_bis()
     bi_zss = icl.get_bi_zss()
-
     summary = ChanStructureSummary()
 
-    if len(bis) >= 3:
-        highs = [max(b.start_price, b.end_price) for b in bis[-5:]]
-        lows = [min(b.start_price, b.end_price) for b in bis[-5:]]
+    if len(bis) >= 5:
+        recent_bis = bis[-5:]
+        highs = [float(b.high) for b in recent_bis]
+        lows = [float(b.low) for b in recent_bis]
         highs_rising = all(highs[i] <= highs[i + 1] for i in range(len(highs) - 1))
         lows_rising = all(lows[i] <= lows[i + 1] for i in range(len(lows) - 1))
         highs_falling = all(highs[i] >= highs[i + 1] for i in range(len(highs) - 1))
@@ -172,7 +181,8 @@ def _build_structure_summary(
 
     if bi_zss:
         latest_zs = bi_zss[-1]
-        zg, zd = float(latest_zs.zg), float(latest_zs.zd)
+        zg = float(latest_zs.zg)
+        zd = float(latest_zs.zd)
         if latest_price > zg:
             summary.price_position = "above_zs"
         elif latest_price < zd:
@@ -189,7 +199,7 @@ def _build_structure_summary(
     if bis:
         latest_bi = bis[-1]
         summary.latest_bi_direction = str(latest_bi.type)
-        summary.latest_bi_strength = _bi_price_strength(latest_bi)
+        summary.latest_bi_strength = round(float(getattr(latest_bi, "strength", 0)), 2)
 
         prev_same = None
         for bi in reversed(bis[:-1]):
@@ -197,8 +207,8 @@ def _build_structure_summary(
                 prev_same = bi
                 break
         if prev_same:
-            summary.prev_bi_strength = _bi_price_strength(prev_same)
-            if summary.prev_bi_strength > 0:
+            summary.prev_bi_strength = round(float(getattr(prev_same, "strength", 0)), 2)
+            if summary.latest_bi_strength > 0 and summary.prev_bi_strength > 0:
                 ratio = summary.latest_bi_strength / summary.prev_bi_strength
                 if ratio < 0.8:
                     summary.strength_comparison = "weakening"
@@ -231,7 +241,6 @@ def build_chan_structure_snapshot(
     *,
     max_bi: int = DEFAULT_MAX_BI,
     max_segment: int = DEFAULT_MAX_SEGMENT,
-    max_center: int = DEFAULT_MAX_CENTER,
 ) -> ChanStructureSnapshot:
     """
     拉取 K 线、运行 chanpy、导出缠论结构快照。
@@ -269,12 +278,11 @@ def build_chan_structure_snapshot(
     all_bis = icl.get_bis()
     all_xds = icl.get_xds()
     centers: list[ChanCenterItem] = []
-    for zs in icl.get_bi_zss()[-max_center:]:
+    for zs in icl.get_bi_zss():
         centers.append(_center_item(zs, "bi"))
-    for zs in icl.get_xd_zss()[-2:]:
+    for zs in icl.get_xd_zss():
         centers.append(_center_item(zs, "segment"))
 
-    trimmed = len(all_bis) > max_bi or len(all_xds) > max_segment
     meta = ChanMeta(
         symbol=display_symbol,
         interval=interval,
@@ -283,9 +291,9 @@ def build_chan_structure_snapshot(
             kline=len(raw),
             bi=len(all_bis),
             segment=len(all_xds),
-            center=len(centers),
+            center=_count_centers(icl),
         ),
-        trim={"max_bi": max_bi, "max_segment": max_segment} if trimmed else None,
+        trim=None,
     )
 
     return ChanStructureSnapshot(

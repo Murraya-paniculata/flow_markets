@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field, field_validator
 
@@ -90,11 +92,19 @@ class GetChanStructureTool(BaseTool):
             lookback=lookback,
         )
         try:
+            _progress = os.environ.get("FM_CHAN_PROGRESS") == "1"
+            if _progress:
+                print("   ✓ 获取到 K 线（计算中…）", file=sys.stderr, flush=True)
             snapshot = build_chan_structure_snapshot(
                 symbol=symbol,
                 timeframe=timeframe,
                 lookback=lookback,
             )
+            if _progress:
+                n = snapshot.meta.data_size.kline
+                print(f"   ✓ 获取到 {n} 根 K 线", file=sys.stderr, flush=True)
+                print("   ✓ 缠论结构计算完成", file=sys.stderr, flush=True)
+                print("   ✓ 结构快照构造完成", file=sys.stderr, flush=True)
             envelope = ChanToolSuccess(data=snapshot)
             payload = envelope.model_dump(mode="json")
             text = json.dumps(payload, ensure_ascii=False, indent=2)

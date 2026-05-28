@@ -19,9 +19,9 @@ logger = get_logger(__name__)
     response_model=ApiResponse[FlowMarketsAnalyzeResponse],
     summary="FlowMarkets 交易研究分析",
     description=(
-        "同步执行多 Agent 研究链（YAML 顺序链 + output_pydantic 结构化输出）。"
+        "同步执行技术分析师（get_chan_structure + chan-analysis Skill → TechnicalAnalysisDeliverable）。"
+        "当前仅启用 technical_analyst，其余 Agent 已暂停。"
         "需配置 LLM API Key（如通义千问 qwen-max）。"
-        "长链路可能耗时数分钟，生产环境建议后续改为异步任务 + 轮询（见设计文档）。"
     ),
 )
 async def analyze(
@@ -29,7 +29,7 @@ async def analyze(
     request_id: str = Depends(get_request_id),
     _api_key: str = Depends(require_api_key),
 ) -> ApiResponse[FlowMarketsAnalyzeResponse]:
-    """执行 FlowMarkets CrewAI 编排，返回 Markdown 报告。"""
+    """执行技术分析师单链，返回 Markdown 报告。"""
     try:
         report, err = await asyncio.to_thread(
             run_flow_markets_analysis,

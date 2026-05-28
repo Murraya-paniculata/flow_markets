@@ -1,0 +1,8 @@
+# FlowMarkets Skills 清单（对齐多智能体教程 load_skills.yaml 治理方式）
+# type: reference = 注入操作手册，不单独起 Sub-Crew；task = 需沙盒/脚本执行（预留）
+
+skills:
+  - name: chan-analysis
+    path: ./chan-analysis
+    type: reference
+    enabled: true
