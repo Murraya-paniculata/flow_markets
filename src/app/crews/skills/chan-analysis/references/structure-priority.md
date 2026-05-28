@@ -1,6 +1,6 @@
 # 缠论分析核心原则：结构优先
 
-摘自 chanlun `prompt_builder.build_structured_prompt()`，供概率分配与场景排序使用。
+供概率分配与场景排序使用（结构优先，非指标驱动）。
 
 ## 1. 中枢关系 > 笔力度
 

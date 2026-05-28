@@ -60,7 +60,7 @@
 | start_price / end_price | 端点价 |
 | buy_sell_point | 如 1buy、2sell，可 null |
 | divergence | 背驰类型：`bi`（笔）、`pz`（盘整）、`xd`（线段）等；无则 null |
-| strength / macd_strength / price_strength | 力度，有则引用 |
+| strength / macd_strength / price_strength | 力度；`macd_strength` 为笔内 MACD 柱面积，`strength` 为 MACD/价差/斜率加权综合 |
 
 ## data.segment[]（最近最多 5 条）
 

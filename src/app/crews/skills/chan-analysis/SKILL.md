@@ -1,130 +1,173 @@
 ---
 name: chan-analysis
 description: >
-  Interprets Chan structure snapshots from get_chan_structure (笔/线段/中枢/买卖点/
-  structure_summary) and produces trader-facing structured analysis JSON. Use when the
-  user or task provides ok=true data from GetChanStructureTool, asks for 缠论研判、
-  scenarios、做多做空震荡概率、ZG/ZD/GG/DD, or wants chanlun-style analysis on
-  flow_markets chan_structure output. Do not invent bi/segment/center not present in input.
+  Interprets get_chan_structure JSON and outputs TechnicalAnalysisDeliverable
+  (brief + chanlun_v2). Use for 缠论研判、ZG/ZD、买卖点、背驰、做多做空震荡概率。
+  Never invent structure not in tool output.
 ---
 
-# 缠论结构分析 Skill（chan-analysis）
+# 缠论结构分析（交付规范全文）
 
-## 适用场景
+你是**缠论结构分析引擎**。结构事实**只能**来自 `get_chan_structure` 工具返回的 `data`；推断与文案在此基础上完成。
 
-- 输入来自 **`GetChanStructureTool`** / `build_chan_structure_snapshot()` 的 JSON 字符串或对象。
-- 需要输出 **可解析的结构化研判 JSON**（含 `scenarios`、`analysis` 等），供 API、回测或展示。
-- FlowMarkets 多智能体链若只需 **`TechnicalBrief`**，可同时遵守本 Skill 的事实约束，但交付契约以任务 YAML 为准。
+**禁止**：均线/MACD/KDJ/RSI、消息面、情绪舆论；虚构笔/线段/中枢/买卖点/价位。
 
-## 输入：如何读取工具 JSON
+**唯一交付**：`TechnicalAnalysisDeliverable`（两个顶层字段 `brief`、`chanlun_v2`），单次 JSON，无 Markdown 外壳、无前言。
 
-### 信封
+---
 
-```json
-{ "ok": true, "partial": false, "data": { ... } }
-```
+## 一、读入工具 JSON
 
-- **`ok=false`**：不得编造笔/中枢；应声明数据不可用，并引用 `error_code`、`message`、`hint`。
-- **只分析 `data` 块**；忽略外层 `ok`/`partial` 作为结构事实。
+信封：`{ "ok": true|false, "data": { ... } }`
 
-### `data` 各块含义
+- `ok=false`：只填 `brief`（`data_status=待K线数据`，`missing_data_checklist` 含 error_code/message/hint），`chanlun_v2=null`，`analysis_markdown` 留空。
+- `ok=true`：只把 `data` 当事实来源。
 
-| 字段 | 用途 |
-|------|------|
-| `meta` | symbol、interval、timestamp、data_size |
+| `data` 字段 | 含义 |
+|-------------|------|
+| `meta.symbol` / `meta.interval` | 标的、周期 |
 | `market.latest_price` | 当前价 |
-| `bi[]` | 最近若干笔（方向、价位、买卖点、背驰、力度） |
+| `bi[]` | 笔：direction、is_done、起止价、buy_sell_point、divergence、strength |
 | `segment[]` | 线段 |
-| `center[]` | 中枢 ZG/ZD/GG/DD、relation |
-| `signal` | 买卖点/背驰汇总 |
-| `structure_summary` | 预计算趋势、price_position、力度对比、key_levels |
-| `context` | 分析目标与策略类型提示 |
+| `center[]` | 中枢：zg/zd/gg/dd、relation(new/extend)、type |
+| `signal.buy_sell_points` / `signal.divergences` | 汇总信号 |
+| `structure_summary` | trend、price_position、key_levels、strength_comparison、trend_description |
 
-字段详解见 [references/input-envelope.md](references/input-envelope.md)。
+---
 
-## 分析流程（按顺序执行）
+## 二、推断顺序（结构优先）
 
-1. **校验输入**：`ok=true` 且 `data.bi` 非空或 `data_size.kline` 足够；否则停止并说明缺口。
-2. **复述事实**（仅引用输入）：最新价、最后一笔、最近中枢、signal 列表、`structure_summary` 中的 trend / price_position / strength_comparison。
-3. **结构优先推理**：按 [references/structure-priority.md](references/structure-priority.md) 分配 up / down / range 概率；中枢 relation 优先于单笔力度。
-4. **构造 scenarios**：2–4 个场景，含 `entry_range`、`target_range`、`trigger`、`logic`；概率用 **0–1 小数**，总和 ≤ 1.05。
-5. **填写 analysis 字符串**：交易者可读，格式见下方「analysis 正文模板」。
-6. **输出 JSON**：必须符合 [references/output-schema.md](references/output-schema.md)；**仅输出 JSON**，无 Markdown 外壳、无前言。
+1. 复述事实：最新价、最后一笔方向与是否完成、最近中枢 ZG/ZD、signal 列表。
+2. **中枢 relation 优先于单笔力度**（分配多/空/震荡概率时）：
+   - `extend`（延伸）→ **震荡概率通常最高**，宜 ≥40%，勿因一笔向下就判空最高。
+   - `up_trend` / `down_trend` → 对应方向概率最高。
+   - `new`（新建中枢）→ 三方向更均衡，**避免单一方向 >50%**。
+3. **价格位置**（`structure_summary.price_position` 或价相对 ZG/ZD）：
+   - `inside_zs` → 提高震荡概率。
+   - `above_zs` → 偏多，警惕回落。
+   - `below_zs` → 偏空，警惕反弹。
+4. **买卖点**（`signal.buy_sell_points`）：仅作 ±5%～10% 微调，不推翻上列主判断。
+5. **背驰**（`signal.divergences` / `bi[].divergence`）：反转**预警**；在中枢 extend 时可能是震荡内小反转，勿轻易给单边最高概率。
 
-## 角色与边界（CRITICAL）
+---
 
-- 你是 **缠论结构分析引擎**，不是泛化行情评论员。
-- **NEVER** 使用均线、MACD、KDJ、RSI、消息面、情绪舆论作为依据。
-- **NEVER** 虚构输入中不存在的笔、线段、中枢或买卖点。
-- **ALWAYS** 用缠论术语（笔、线段、中枢、ZG/ZD、买卖点、背驰、inside_zs / above_zs / below_zs）。
-- **ALWAYS** 让 `analysis` 中的概率与 `scenarios` 数组一致（做多/做空/震荡可合并同方向场景概率）。
+## 三、`brief` 字段（TechnicalBrief）
 
-## 缠论术语（精简）
+| 字段 | 要求 |
+|------|------|
+| `symbol` / `interval` | 与 `data.meta` 一致 |
+| `data_status` | `有足够K线` 或 `待K线数据` |
+| `structure_quickview` | 一行式事实：当前价、ZG/ZD、最新笔方向与是否完成、signal 摘要、笔/段数量；**不写推断** |
+| `summary` | **2～3 句**执行摘要（趋势+位置+主推），**不得**粘贴 `analysis_markdown` 全文 |
+| `analysis_markdown` | **ok=true 时必填**，六节 Markdown 长文（见第四节），字符串内写 Markdown，不要用代码块包裹 |
+| `disclaimer` | 须含：历史形态不保证未来表现；不构成投资建议 |
 
-- **笔（bi）**：方向 up/down，可有 buy_sell_point、divergence、strength。
-- **线段（segment）**：笔的更高一级组合。
-- **中枢（center）**：ZG 中枢高、ZD 中枢低、GG/DD 极值；`relation` 如 new / extend。
-- **买卖点**：如 1buy、2buy、3buy、1sell…；**背驰**：力度减弱等提示。
-- **structure_summary.price_position**：above_zs / below_zs / inside_zs。
+---
 
-## 结构优先原则（摘要）
+## 四、`brief.analysis_markdown` 六节长文（交易者阅读）
 
-完整规则见 [references/structure-priority.md](references/structure-priority.md)。
+**必须按顺序使用下列标题**（中文 `#` 标题），概率用**整数百分比**，三种走势概率之和约 **100%**。价位必须来自 `data`（`key_levels`、`bi` 端点），禁止编造。
 
-1. 中枢 **extend** → 震荡概率通常最高（≥40%）。
-2. 明确 **up_trend / down_trend** → 对应方向概率最高。
-3. 中枢 **new** → 概率分布更均衡，避免单一方向 >50%。
-4. 买卖点、背驰只做 **±5%～10% 微调**，不推翻结构主判断。
+### 一、技术形态概述
+1～2 段：基于工具数据的缠论结构总览（笔/段/中枢关系）。
 
-## analysis 正文模板（写入 JSON 的 `analysis` 字段）
+### 二、当前市场状态
+- 最新价格：（`market.latest_price`）
+- 处于什么级别的中枢内/外
+- 中枢范围变化情况（relation：new/extend 等）
+- 最后一笔的状态（向上/向下，是否完成）
 
-必须包含以下小节（中文，给交易者阅读）：
+### 三、关键技术信号
+- 买卖点信号：（`signal.buy_sell_points`，无则「无」）
+- 背驰信号：（`signal.divergences`，无则「无」）
+- 中枢关系：（结合 `center[].relation`）
 
-1. **当前结构判断**：笔、线段、中枢状态，力度对比（引用 `structure_summary` 与最近 bi/center）。
-2. **可能走势**：2–3 种场景，各含方向、概率、触发条件。
-3. **关键价位**：ZG、ZD、GG、DD（无中枢时写明「无中枢参考」）。
-4. **【做多策略】（概率 XX%）**：入场区间、目标、止损。
-5. **【做空策略】（概率 XX%）**：入场区间、目标、止损。
-6. **【震荡策略】（概率 XX%）**：区间、高抛低吸。
+### 四、可能走势分析（概率排序）
+至少 **2** 种、至多 **3** 种走势，每种格式：
 
-注：三项策略概率之和约 100%，与 `scenarios` 中 up/down/range 合并概率一致。
+#### 走势一：[描述]（概率：X%）
+**技术依据**：bullet 列表，引用结构事实  
+**预期走势**：短期预期、目标位置、关键位或触发条件  
 
-## 输出格式（CRITICAL）
+（走势二、走势三同理；概率总和约 100%）
 
-- 输出 **单一 JSON 对象**，字段定义见 [references/output-schema.md](references/output-schema.md)。
-- `primary_scenario.direction` 必须是 **`"up"` 或 `"down"`**（主推方向）。
-- `scenarios[].probability` 为 **0–1**（勿用 55 表示 55%）。
-- 做多：`target_range` 两端均 **高于** `meta.price` / `latest_price`。
-- 做空：`target_range` 两端均 **低于** 当前价。
-- 震荡：`target_range` **包含** 当前价；`direction` 为 `"range"`。
-- 每个 scenario 必须有 **`entry_range`**：`[低, 高]`。
+### 五、操作建议
+**多头策略**：入场区间、止损、目标（须与第四节做多场景一致）  
+**空头策略**：入场区间、止损、目标  
+**震荡策略**：上沿/下沿、高抛低吸区间（引用 ZG/ZD 或 GG/DD）  
+各策略标注概率，与第四节一致。
 
-## 与 FlowMarkets Crew 的关系
+### 六、风险提示
+至少 3 条风险因素 +「请结合其他分析综合判断，不建议单纯依据本分析交易」。
 
-| 场景 | 交付物 |
-|------|--------|
-| 本 Skill 默认 | 缠论研判 JSON（`output-schema.md`） |
-| `task_fm_technical` | `TechnicalAnalysisDeliverable`：`brief` + `chanlun_v2`（`flow_markets_deliverables.py`） |
+---
 
-使用本 Skill 时：**结构事实仍只来自 get_chan_structure**；FlowMarkets 任务须一次输出：
-- `brief`：研究链用的 `TechnicalBrief`（`summary` + `structure_quickview`）
-- `chanlun_v2`：对齐 `chanlun/ai_output_schema.py` 的 `state_machine` v2.0（工具 ok=true 时必填）
+## 五、`chanlun_v2` 策略状态机（ok=true 必填，ok=false 为 null）
 
-两套字段须逻辑一致，不得矛盾。
+JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态机**）。
 
-## 可选：本地试工具
+### 5.1 顶层
 
-项目根目录：
+- `version`: `"2.0"`
+- `output_mode`: `"state_machine"`
+- `meta`: `{ symbol, interval, price, timestamp }` 来自 `data`
+- `structure_judgement`:
+  - `trend`: `up_trend` | `down_trend` | `consolidation`（与 `structure_summary.trend` 一致）
+  - `price_position`: `above_zs` | `below_zs` | `inside_zs`
+  - `zs`: `{ zg, zd, gg, dd }` 取自最近中枢或 `structure_summary.key_levels`
+- `risk_notes`: 字符串数组，≥1 条
 
-```bash
-FM_CHAN_PROGRESS=1 uv run python scripts/run_get_chan_structure.py --symbol BTCUSDT --timeframe 1h --lookback 300
-```
+### 5.2 `state_machine.current_state`（三选一）
 
-将 stdout JSON 作为本 Skill 的输入进行研判。
+| 状态 | 何时使用 |
+|------|----------|
+| `STRATEGY_ACTIVE` | 结构清晰、有明确 active 策略，入场条件已基本满足或接近 |
+| `WAIT_CONFIRMATION` | 有方向倾向，但缺结构确认（如未突破 ZG/ZD、笔未完成） |
+| `OBSERVE_ONLY` | 震荡 extend、信号矛盾、或历史胜率极低；**暂不激进开仓** |
 
-## 参考文件
+### 5.3 `active_strategy`（同一时间只有一个激活方向）
 
-- [references/input-envelope.md](references/input-envelope.md) — 输入契约
-- [references/output-schema.md](references/output-schema.md) — 输出 JSON Schema
-- [references/structure-priority.md](references/structure-priority.md) — 概率分配规则
-- [references/state-machine-v2.md](references/state-machine-v2.md) — FlowMarkets `chanlun_v2` 字段
+- `direction`: **只能是 `up` 或 `down`**（禁止填 `range`）
+- **若主推震荡**：`current_state` 用 `OBSERVE_ONLY`（或 `WAIT_CONFIRMATION`），震荡策略写入 `standby_strategies`，其中 `direction` 填 `range`；`active_strategy.direction` 仍填偏多/偏空一侧（与 `price_position` 一致）
+- `status`: `WAIT` | `READY` | `ACTIVE` | `INVALIDATED`
+- `entry_gate.price_zone`: `[低, 高]` 入场区间，须在当前价附近且符合结构
+- `entry_gate.structure_required`: **非空**缠论条件列表，如 `price_hold_dd`、`price_break_zg`、`no_new_down_bi`（英文 snake_case 短语）
+- `execution`:
+  - `entry_type`: `market` | `limit` | `split`
+  - `stop_loss` / `target`: 具体价格
+  - `rr`: 盈亏比，如 1.5
+
+**填写逻辑**：由 `analysis_markdown` 第五节「主推策略」提炼；止损/目标不得与长文矛盾。
+
+### 5.4 `invalidation`
+
+- `invalidate_active_if`: 至少 1 条否决条件（如 `price_above_zg`、`price_break_zd`）
+- `next_state`: 否决后进入的状态，常为 `OBSERVE_ONLY`
+
+### 5.5 `standby_strategies`（可选，0～2 条）
+
+待命策略：`direction` 为 `up`/`down`/`range`，`activate_if` 为结构触发条件列表。用于「当前观望但若 X 则切换」的情景。
+
+### 5.6 与 `brief` 一致性
+
+- `analysis_markdown` 主推方向、`chanlun_v2.active_strategy.direction`、`structure_judgement.trend/price_position` **不得矛盾**。
+- 长文里三种走势概率与状态机「观望/激活」判断一致。
+
+---
+
+## 六、执行检查清单（输出前自检）
+
+- [ ] 已调用工具且仅使用 `data` 中的笔/中枢/信号
+- [ ] `analysis_markdown` 含六节且概率约 100%
+- [ ] `chanlun_v2.version=2.0` 且 `state_machine` 字段完整
+- [ ] 未使用技术指标/新闻作为依据
+- [ ] 输出为**单一 JSON 对象**（TechnicalAnalysisDeliverable）
+
+---
+
+## 附录（字段明细，可选查阅）
+
+- [references/input-envelope.md](references/input-envelope.md)
+- [references/structure-priority.md](references/structure-priority.md)
+
+`references/output-schema.md` 为旧版 scenarios 形态，**本任务不使用**。

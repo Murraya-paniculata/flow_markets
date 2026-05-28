@@ -1,8 +1,8 @@
-# Chanlun state_machine v2.0（FlowMarkets `chanlun_v2` 字段）
+# 策略状态机 v2.0（`TechnicalAnalysisDeliverable.chanlun_v2`）
 
-对齐 `chanlun/ai_output_schema.py` 的 `get_state_machine_schema_template()`。
+`chanlun_v2` 仅为 JSON 字段名，表示「可执行策略状态机」结构化块，与任何外部仓库无关。
 
-## 顶层（嵌在 TechnicalAnalysisDeliverable.chanlun_v2）
+## 顶层
 
 | 字段 | 说明 |
 |------|------|
@@ -25,4 +25,4 @@
 - `invalidation.next_state`: 如 `OBSERVE_ONLY`
 - `standby_strategies`: 可选数组
 
-工具 `ok=false` 时整段 `chanlun_v2` 为 `null`，仅填 `brief`。
+工具 `ok=false` 时 `chanlun_v2` 为 `null`，仅填 `brief`。

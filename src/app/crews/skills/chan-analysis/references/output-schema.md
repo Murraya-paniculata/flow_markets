@@ -1,7 +1,6 @@
-# 缠论研判输出 JSON Schema
+# 缠论研判输出 JSON Schema（参考）
 
-对齐 chanlun `ai_output_schema.get_schema_template()`，供 **chan-analysis** Skill 单次 LLM 输出使用。  
-校验逻辑可参考 `chanlun/ai_output_schema.py` 的 `validate_ai_output()`（flow_markets 侧可后续加 Pydantic 模型）。
+**FlowMarkets `task_fm_technical` 实际交付为 `TechnicalAnalysisDeliverable`（`brief` + `chanlun_v2`），以下 schema 仅作 scenarios 形态参考，勿与任务交付混用。**
 
 ## 完整模板
 

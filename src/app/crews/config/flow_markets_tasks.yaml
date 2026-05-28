@@ -41,34 +41,40 @@ task_fm_technical:
   description: |
     用户诉求：{{user_query}}，标的：{{symbol}}，补充：{{notes}}。
 
-    执行顺序（必须遵守，单 Task 内完成）：
-    1. 先调用工具 get_chan_structure：symbol={{symbol}}（若为「未指定」则仍调用并在摘要中说明），
-       timeframe=1h，lookback=300。在得到工具返回前不要撰写最终 JSON。
-    2. 工具返回后，按已注入的 chan-analysis Skill 解读 JSON（只分析 ok=true 时的 data；
-       ok=false 时按 Skill 声明数据不可用，不得编造笔/中枢）。
-    3. 一次输出 TechnicalAnalysisDeliverable（顶层两个字段，勿拆成两次回答）：
+    执行步骤：
+    1. 调用 get_chan_structure：symbol={{symbol}}（「未指定」也调用并在 brief 说明），timeframe=1h，lookback=300。
+       未拿到工具返回前不要写最终 JSON。
+    2. 只分析工具返回的 data（ok=false 则只填 brief 待数据项，chanlun_v2=null）。禁止编造笔/中枢/价位；
+       禁止用均线、MACD、消息、情绪做依据。
+    3. 一次输出 TechnicalAnalysisDeliverable（仅 brief、chanlun_v2 两个顶层键）：
 
-    【A】brief（TechnicalBrief，给 FlowMarkets 研究链）
-    - ok=true：data_status=有足够K线；structure_quickview=结构事实；summary=推断与失效条件（≥2条）
-    - ok=false：data_status=待K线数据；structure_quickview 留空；missing_data_checklist 含 error_code/hint
+    【结构优先——分配走势概率与状态机前强制执行】
+    - 中枢 relation=extend → 震荡概率通常最高（宜≥40%），勿因一笔向下/向上就判单边最高
+    - 中枢 relation=new → 多/空/震荡更均衡，避免任一方向概率>50%
+    - price_position：inside_zs 偏震荡；above_zs 偏多；below_zs 偏空（均警惕反向）
+    - signal 买卖点：仅 ±5%～10% 微调；背驰在 extend 下可能是震荡内小反转，勿轻易单边最高
 
-    【B】chanlun_v2（ok=true 时必填，对齐 chanlun state_machine v2.0）
-    - version=2.0，output_mode=state_machine
-    - meta：symbol/interval/price/timestamp 来自工具 data
-    - state_machine.current_state：STRATEGY_ACTIVE | WAIT_CONFIRMATION | OBSERVE_ONLY 之一
-    - state_machine.active_strategy：direction(up/down)、status(WAIT/READY/ACTIVE/INVALIDATED)、
-      entry_gate(price_zone 两数、structure_required 非空缠论条件列表)、
-      execution(entry_type、stop_loss、target、rr)
-    - state_machine.invalidation：invalidate_active_if 至少 1 条；next_state
-    - structure_judgement：trend、price_position、zs(zg/zd/gg/dd)
-    - risk_notes：风险提示数组
-    - brief 与 chanlun_v2 结论须一致，不得矛盾
-    - ok=false 时 chanlun_v2=null
+    【brief】ok=true 时：
+    - structure_quickview：一行事实（价、ZG/ZD、最新笔、signal、笔段数）
+    - summary：2～3 句执行摘要，不重复长文
+    - analysis_markdown：必填六节 Markdown 字符串——
+      「一、技术形态概述」「二、当前市场状态」「三、关键技术信号」
+      「四、可能走势分析（概率排序）」至少2种至多3种走势、概率合计约100%、
+      「五、操作建议」多/空/震荡入场止损目标、「六、风险提示」
+    - disclaimer：含历史形态不保证未来表现、不构成投资建议
 
-    历史胜率降级（若有 stats 上下文）：胜率<25%→OBSERVE_ONLY；25–35%→WAIT_CONFIRMATION；>35%→STRATEGY_ACTIVE。
+    【chanlun_v2】ok=true 时必填（version=2.0, output_mode=state_machine）：
+    - meta/structure_judgement/risk_notes 与 data 一致
+    - state_machine.current_state：STRATEGY_ACTIVE | WAIT_CONFIRMATION | OBSERVE_ONLY
+    - active_strategy：direction **仅 up 或 down**（禁止 range；震荡放 standby_strategies.direction=range）；
+      entry_gate.price_zone 两数；structure_required 非空；
+      execution 含 stop_loss、target、rr
+    - invalidation：invalidate_active_if≥1 条；next_state
+    - standby_strategies 可选；与 analysis_markdown 主推方向不得矛盾
+
   expected_output: |
-    符合 TechnicalAnalysisDeliverable 的单一 JSON：含 brief 与 chanlun_v2（或 null）。
-    结构事实仅来自 get_chan_structure；禁止虚构 K 线、笔、中枢或具体买卖点位。
+    单一 JSON：TechnicalAnalysisDeliverable（brief + chanlun_v2 或 null）。
+    禁止输出 Markdown 包裹、禁止前言、禁止编造 K 线/笔/中枢/点位。
 
 # task_fm_synthesis:
 #   agent: research_manager
