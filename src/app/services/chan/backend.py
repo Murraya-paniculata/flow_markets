@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from .divergence import attach_bcs_from_engine_bsp, attach_strength_divergences
 from .types import (
     MergedKline,
     SimpleBi,
@@ -451,6 +452,20 @@ class ChanEngineICL:
             if i < len(self._bi_zss)
         }
         _attach_bsp_mmds(kl_data, self._bis, self._xds, zs_map, BSP_TYPE)
+        attach_bcs_from_engine_bsp(
+            kl_data,
+            self._bis,
+            self._xds,
+            self._bi_zss,
+            self._xd_zss,
+            zs_map,
+        )
+        attach_strength_divergences(
+            self._bis,
+            self._xds,
+            self._bi_zss,
+            self._xd_zss,
+        )
         self._bsp_chart = _collect_bsp_chart(kl_data, self._merged_klines)
 
         logger.info(

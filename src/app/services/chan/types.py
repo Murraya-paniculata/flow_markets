@@ -138,6 +138,22 @@ class SimpleZS:
         self.end_merged_idx: int | None = None
 
 
+class SimpleBC:
+    """背驰标记（导出 type: bi / xd / pz 等）。"""
+
+    def __init__(
+        self,
+        bc_type: str,
+        is_bc: bool = True,
+        zs: Optional[SimpleZS] = None,
+        compare_item: Any = None,
+    ):
+        self.type = bc_type
+        self.bc = is_bc
+        self.zs = zs
+        self.compare_item = compare_item
+
+
 class SimpleMMD:
     def __init__(self, name: str, zs: Optional[SimpleZS] = None, msg: Optional[str] = None):
         self.name = name
