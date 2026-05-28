@@ -78,10 +78,9 @@ class OpenAICompatChatLLM(BaseLLM):
             "endpoint": self.endpoint,
             "model": self.model,
             "num_messages": len(messages),
-            "raw_messages": messages,
         }
         log_fields.update(self._request_log_extra)
-        logger.info("llm_request", **log_fields)
+        # logger.debug("llm_request", **log_fields)
 
         try:
             response = requests.post(
@@ -95,7 +94,7 @@ class OpenAICompatChatLLM(BaseLLM):
             )
             response.raise_for_status()
             result = response.json()
-            logger.info("llm_response", result=result)
+            logger.debug("llm_response", model=self.model)
         except requests.Timeout:
             logger.warning("llm_timeout", timeout=self.timeout)
             raise TimeoutError(f"LLM 请求超时（{self.timeout} 秒）")
