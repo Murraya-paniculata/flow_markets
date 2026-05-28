@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.schemas.chan_structure import ChanStructureSnapshot
     from app.schemas.flow_markets_deliverables import (
         ChanlunStateMachineOutput,
         TechnicalAnalysisDeliverable,
@@ -185,26 +186,107 @@ def _format_active_strategy_block(
     return lines
 
 
+def format_structure_cli_summary(snapshot: ChanStructureSnapshot) -> str:
+    """缠论结构快览（对齐 chanlun output_formatter.format_summary，供 --no-ai 或步骤展示）。"""
+    symbol = snapshot.meta.symbol
+    interval = snapshot.meta.interval
+    ss = snapshot.structure_summary
+    mkt = snapshot.market
+    sig = snapshot.signal
+    ds = snapshot.meta.data_size
+
+    lines: list[str] = []
+    lines.append("")
+    lines.append(_SEP)
+    lines.append(f"【{symbol} · {interval} 缠论结构快览】")
+    lines.append(_SEP)
+    lines.append("")
+    lines.append(f"💰 当前价格：{mkt.latest_price:,.2f}")
+    lines.append("")
+
+    if snapshot.center:
+        for i, c in enumerate(snapshot.center):
+            zg = c.zg or c.high or 0
+            zd = c.zd or c.low or 0
+            rel = {"new": "新建", "extend": "延伸"}.get(c.relation or "", c.relation or "")
+            lines.append(f"🧱 中枢 #{i + 1}（{c.type}）：{zd:,.2f} ~ {zg:,.2f}")
+            lines.append(f"   关系：{rel}")
+    else:
+        lines.append("🧱 中枢：暂无")
+    lines.append("")
+
+    if snapshot.bi:
+        lb = snapshot.bi[-1]
+        direction = "↑ 向上" if lb.direction == "up" else "↓ 向下"
+        status = "（已完成）" if lb.is_done else "（进行中）"
+        end_p = lb.end_price if lb.end_price is not None else 0
+        extra = ""
+        if lb.buy_sell_point:
+            extra += f" 买卖点={lb.buy_sell_point}"
+        if lb.divergence:
+            extra += f" 背驰={lb.divergence}"
+        lines.append(f"📊 最新一笔：{direction} {status} 结束价 {end_p:,.2f}{extra}")
+    else:
+        lines.append("📊 最新一笔：数据不足")
+    lines.append("")
+
+    if sig.buy_sell_points or sig.divergences:
+        lines.append("🚨 近期信号：")
+        if sig.buy_sell_points:
+            lines.append(f"   买卖点：{', '.join(sig.buy_sell_points)}")
+        if sig.divergences:
+            lines.append(f"   背驰：{', '.join(sig.divergences)}")
+    else:
+        lines.append("🚨 近期信号：无")
+    lines.append("")
+
+    lines.append(
+        f"📈 结构统计：{ds.bi} 笔 / {ds.segment} 线段 / {ds.center} 中枢"
+        f"（K 线 {ds.kline} 根）"
+    )
+    lines.append(f"📐 趋势：{ss.trend_description}；位置：{ss.position_description}")
+    kl = ss.key_levels
+    if kl.zg or kl.zd:
+        lines.append(
+            f"📍 关键位 ZG={kl.zg:,.0f} ZD={kl.zd:,.0f} GG={kl.gg:,.0f} DD={kl.dd:,.0f}"
+        )
+    lines.append("")
+    lines.append(_SEP)
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_analysis_markdown_block(markdown: str) -> list[str]:
+    """对齐 chanlun output_formatter.format_analysis：原样输出 Markdown。"""
+    body = markdown.strip()
+    if not body:
+        return []
+    lines = ["", _SEP, "【AI 缠论分析】", _SEP, "", body, "", _SEP, ""]
+    return lines
+
+
 def format_trader_display(
     deliverable: TechnicalAnalysisDeliverable,
 ) -> str:
     """
     将 TechnicalAnalysisDeliverable 格式化为给交易者看的终端文案。
 
-    含：AI 解读正文、三向策略概率条、状态机执行要点。
+    有 brief.analysis_markdown 时对齐 chanlun --table（六节 Markdown 长文）；
+    否则回退为摘要 + 状态机卡片。
     """
     brief = deliverable.brief
     chanlun = deliverable.chanlun_v2
     symbol = brief.symbol
     interval = brief.interval or "1h"
+    analysis_md = (brief.analysis_markdown or "").strip()
 
     out: list[str] = []
-    out.append("")
-    out.append(_SEP)
-    out.append("📝 AI 市场分析（给交易者看的解读）")
-    out.append(_SEP)
 
     if brief.data_status == "待K线数据":
+        out.append("")
+        out.append(_SEP)
+        out.append("📝 AI 市场分析（给交易者看的解读）")
+        out.append(_SEP)
         out.append(f"  {symbol} · {interval}：缠论结构暂不可用。")
         out.append(f"  {brief.summary.strip()}")
         if brief.missing_data_checklist:
@@ -214,6 +296,30 @@ def format_trader_display(
         out.append(_SEP)
         out.append("")
         return "\n".join(out)
+
+    if analysis_md:
+        meta_price = chanlun.meta.price if chanlun else None
+        out.append("")
+        out.append(_SEP)
+        out.append(f"【{symbol} · {interval} 缠论 AI 分析】")
+        out.append(_SEP)
+        if meta_price is not None:
+            out.append(f"💰 当前价格：{meta_price:,.2f}")
+            out.append("")
+        if (brief.summary or "").strip():
+            out.append("【执行摘要】")
+            out.append(brief.summary.strip())
+            out.append("")
+        out.extend(_format_analysis_markdown_block(analysis_md))
+        if (brief.disclaimer or "").strip():
+            out.append(brief.disclaimer.strip())
+        out.append("")
+        return "\n".join(out)
+
+    out.append("")
+    out.append(_SEP)
+    out.append("📝 AI 市场分析（给交易者看的解读）")
+    out.append(_SEP)
 
     meta_price = chanlun.meta.price if chanlun else None
     open_line = f"  当前 {symbol} 处于 {interval} 周期缠论结构中。"

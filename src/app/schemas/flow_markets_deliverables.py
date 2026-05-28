@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 Confidence3 = Literal["低", "中", "高"]
@@ -123,8 +123,16 @@ class TechnicalBrief(BaseModel):
     summary: str = Field(
         ...,
         description=(
-            "分析推断（写在结构快览之前）：趋势与位置解读、情景与相对概率（定性）、"
-            "失效条件（≥2 条）、信息缺口。不得重复粘贴 structure_quickview 全文。"
+            "2～3 句执行摘要（趋势、位置、主推方向）；不得重复 analysis_markdown 全文。"
+            "失效条件可在此简要列出。"
+        ),
+    )
+    analysis_markdown: str = Field(
+        default="",
+        description=(
+            "交易者可读 Markdown 长文（六节：形态概述、市场状态、技术信号、走势概率、操作建议、风险提示）；"
+            "data_status=有足够K线 时必填，章节见 chan-analysis Skill markdown-report-template；"
+            "无数据时留空。"
         ),
     )
     structure_quickview: str = Field(
@@ -142,7 +150,7 @@ class TechnicalBrief(BaseModel):
     disclaimer: str = Field(..., description="须含：历史形态不保证未来表现；不构成投资建议。")
 
 
-# --- Chanlun v2.0 state_machine（对齐 chanlun/ai_output_schema.get_state_machine_schema_template）---
+# --- 策略状态机 v2.0（TechnicalAnalysisDeliverable.chanlun_v2，JSON 字段名保留）---
 
 StateMachineState = Literal["STRATEGY_ACTIVE", "WAIT_CONFIRMATION", "OBSERVE_ONLY"]
 StrategyDirection = Literal["up", "down"]
@@ -173,7 +181,10 @@ class ChanlunExecution(BaseModel):
 
 
 class ChanlunActiveStrategy(BaseModel):
-    direction: StrategyDirection
+    direction: StrategyDirection = Field(
+        ...,
+        description="仅允许 up 或 down；震荡主推勿填 range，应使用 standby_strategies.direction=range。",
+    )
     status: StrategyStatus
     entry_gate: ChanlunEntryGate
     execution: ChanlunExecution
@@ -224,7 +235,7 @@ class ChanlunStructureJudgement(BaseModel):
 
 
 class ChanlunStateMachineOutput(BaseModel):
-    """Chanlun v2.0 状态机输出（单次 LLM / Web 策略门禁，对齐 ai_output_schema）。"""
+    """策略状态机 v2.0 结构化输出（version 2.0, output_mode=state_machine）。"""
 
     meta: ChanlunAnalysisMeta
     version: Literal["2.0"] = "2.0"
@@ -233,14 +244,63 @@ class ChanlunStateMachineOutput(BaseModel):
     structure_judgement: ChanlunStructureJudgement
     risk_notes: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_range_off_active_strategy(cls, data: Any) -> Any:
+        """LLM 常把震荡写成 active_strategy.direction=range；改入 standby 并保留 up/down 激活腿。"""
+        if not isinstance(data, dict):
+            return data
+        sm = data.get("state_machine")
+        if not isinstance(sm, dict):
+            return data
+        active = sm.get("active_strategy")
+        if not isinstance(active, dict):
+            return data
+        raw_dir = str(active.get("direction", "")).strip().lower()
+        if raw_dir not in ("range", "震荡", "consolidation", "横盘"):
+            return data
+
+        sj = data.get("structure_judgement") or {}
+        pos = str(sj.get("price_position", "")).lower()
+        trend = str(sj.get("trend", "")).lower()
+        if pos == "above_zs" or "up" in trend:
+            active["direction"] = "up"
+        elif pos == "below_zs" or "down" in trend:
+            active["direction"] = "down"
+        else:
+            active["direction"] = "down"
+
+        cur = str(sm.get("current_state", "")).strip()
+        if cur == "STRATEGY_ACTIVE":
+            sm["current_state"] = "OBSERVE_ONLY"
+        elif not cur:
+            sm["current_state"] = "OBSERVE_ONLY"
+
+        standby = list(sm.get("standby_strategies") or [])
+        if not any(
+            isinstance(s, dict) and str(s.get("direction", "")).lower() == "range"
+            for s in standby
+        ):
+            standby.append(
+                {
+                    "direction": "range",
+                    "activate_if": ["price_inside_zs", "range_primary_scenario"],
+                }
+            )
+        sm["standby_strategies"] = standby
+        return data
+
 
 class TechnicalAnalysisDeliverable(BaseModel):
-    """技术分析师双交付：FlowMarkets 简报 + Chanlun 状态机（一次 Task 输出）。"""
+    """技术分析师双交付：简报 brief + 策略状态机 chanlun_v2（一次 Task 输出）。"""
 
     brief: TechnicalBrief = Field(..., description="研究链下游使用的技术分析摘要。")
     chanlun_v2: ChanlunStateMachineOutput | None = Field(
         default=None,
-        description="工具 ok=true 时必填；ok=false 时为 null。",
+        description=(
+            "策略状态机 v2.0：含 state_machine、structure_judgement、risk_notes；"
+            "get_chan_structure 成功时必填，失败时为 null。"
+        ),
     )
 
 
@@ -485,7 +545,7 @@ def _render_chanlun_state_machine(sm: ChanlunStateMachineOutput) -> str:
     if sm.risk_notes:
         risk_block = f"\n### 风险提示\n{_bullets(sm.risk_notes)}\n"
     return f"""
-### Chanlun 状态机（v2.0）
+### 策略状态机（v2.0）
 
 **meta**：{sm.meta.symbol} | {sm.meta.interval} | 价 {sm.meta.price} | {sm.meta.timestamp}
 
@@ -535,6 +595,14 @@ def _render_technical(m: TechnicalBrief) -> str:
 {m.structure_quickview.strip()}
 """
 
+    analysis_block = ""
+    if (m.analysis_markdown or "").strip():
+        analysis_block = f"""
+### AI 缠论分析（Markdown）
+
+{m.analysis_markdown.strip()}
+"""
+
     return f"""{_section_heading("TechnicalBrief")}
 
 **标的**：{m.symbol} | **周期**：{m.interval or "—"} | **数据状态**：{m.data_status}
@@ -542,7 +610,7 @@ def _render_technical(m: TechnicalBrief) -> str:
 ### 分析推断
 
 {m.summary}
-{quickview_block}{extra}
+{quickview_block}{analysis_block}{extra}
 ### 声明
 {m.disclaimer}
 """
