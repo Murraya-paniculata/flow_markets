@@ -1,4 +1,4 @@
-"""chanpy 结构对象（笔/段/中枢/分型等）。"""
+"""缠论结构引擎内部对象（笔/段/中枢/分型等）。"""
 from __future__ import annotations
 
 from typing import Any, List, Optional

@@ -75,7 +75,7 @@ src/app/
 ├── schemas/          # Pydantic Request/Response/Domain
 ├── services/chan/    # analyze / backend / chart / kline / types
 └── observability/
-chanpy/               # 内置 Vespa314/chan.py（仅计算与 Plot，无 Demo/Debug）
+chanpy/               # vendored 缠论结构计算库（目录名保留；业务代码称「结构引擎」）
 scripts/demo_chan_chart.py
 tests/                # unit、integration
 deploy/               # docker、k8s、grafana
@@ -118,22 +118,22 @@ deploy/               # docker、k8s、grafana
 
 完整项见 `.env.example`。
 
-### 缠论（chanpy）
+### 缠论（结构引擎）
 
-引擎在 **`chanpy/`**（[Vespa314/chan.py](https://github.com/Vespa314/chan.py) vendoring）。业务代码在 **`src/app/services/chan/`**。
+计算库 vendored 在仓库内 `chanpy/` 目录；对外 API、JSON 与日志统一使用 **`structure-engine`**，业务代码在 **`src/app/services/chan/`**。
 
 | 文件         | 作用                                 |
 | ------------ | ------------------------------------ |
 | `analyze.py` | API 入口 `build_kline_chart_payload` |
-| `backend.py` | chanpy 计算与结构转换                |
+| `backend.py` | 结构引擎计算与结构转换               |
 | `chart.py`   | 结构 → 前端 JSON                     |
 | `kline.py`   | Binance + 北京时间聚合               |
 
-可选 `APP_CHANPY_ROOT` 覆盖内置 chanpy 路径。
+可选 **`APP_CHAN_ENGINE_ROOT`** 覆盖内置计算库路径（旧环境变量名仍可读入，见 `config.py`）。
 
 **API**：`GET /api/v1/chan/kline/{symbol}/{interval}?limit=350`（需 `X-API-Key`）
 
-返回字段与 chanlun 图表对齐：`klines`、`merged_klines`、`bi`、`xd`、`zs`、`fx`、`bsp`，`meta.engine` 为 `chanpy`。
+返回字段与 chanlun 图表对齐：`klines`、`merged_klines`、`bi`、`xd`、`zs`、`fx`、`bsp`，`meta.engine` 为 **`structure-engine`**。
 
 **本地验图**（与 `chan.py/demo_btcusdt.py` 同类，输出 PNG）：
 

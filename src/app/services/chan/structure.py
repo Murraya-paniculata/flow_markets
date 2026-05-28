@@ -1,4 +1,4 @@
-"""缠论结构快照：K 线 → chanpy → 裁剪 JSON（与 chanlun ChanlunAIExporter 对齐）。"""
+"""缠论结构快照：K 线 → 结构引擎 → 裁剪 JSON（与 chanlun ChanlunAIExporter 对齐）。"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -17,8 +17,8 @@ from app.schemas.chan_structure import (
     ChanStructureSummary,
     ChanKeyLevels,
 )
-from app.services.chan.analyze import _apply_chanpy_root, _run_chanpy
-from app.services.chan.backend import ChanpyICL
+from app.services.chan.analyze import _apply_chan_engine_root, _run_chan_engine
+from app.services.chan.backend import ENGINE_ID, ChanEngineICL
 from app.services.chan.kline import cap_limit, get_klines_beijing, normalize_interval
 from app.services.chan.types import SimpleBi, SimpleMMD, SimpleXD, SimpleZS
 
@@ -49,7 +49,7 @@ def _dt_iso(dt) -> str:
     return str(dt)
 
 
-def _collect_signals(icl: ChanpyICL) -> ChanSignal:
+def _collect_signals(icl: ChanEngineICL) -> ChanSignal:
     buy_sell: list[str] = []
     divergences: list[str] = []
 
@@ -94,7 +94,7 @@ def _bi_item(bi: SimpleBi) -> ChanBiItem:
     kwargs = dict(
         index=int(bi.index),
         direction=str(bi.type),
-        is_done=True,
+        is_done=bool(bi.is_done()),
         start_time=_dt_iso(bi.start_time) or None,
         end_time=_dt_iso(bi.end_time) or None,
         start_price=float(bi.start_price),
@@ -120,7 +120,7 @@ def _segment_item(xd: SimpleXD) -> ChanSegmentItem:
     return ChanSegmentItem(
         index=int(xd.index),
         direction=str(xd.type),
-        is_done=True,
+        is_done=bool(xd.is_done()),
         start_time=_dt_iso(xd.start_time) or None,
         end_time=_dt_iso(xd.end_time) or None,
         start_price=float(xd.start_price),
@@ -149,14 +149,14 @@ def _center_item(zs: SimpleZS, zs_kind: str) -> ChanCenterItem:
     )
 
 
-def _count_centers(icl: ChanpyICL) -> int:
+def _count_centers(icl: ChanEngineICL) -> int:
     n = len(icl.get_bi_zss())
     n += len(icl.get_xd_zss())
     return n
 
 
 def _build_structure_summary(
-    icl: ChanpyICL,
+    icl: ChanEngineICL,
     latest_price: float,
 ) -> ChanStructureSummary:
     """与 chanlun/chanlun_ai_exporter._build_structure_summary 逻辑一致。"""
@@ -243,13 +243,13 @@ def build_chan_structure_snapshot(
     max_segment: int = DEFAULT_MAX_SEGMENT,
 ) -> ChanStructureSnapshot:
     """
-    拉取 K 线、运行 chanpy、导出缠论结构快照。
+    拉取 K 线、运行缠论结构引擎、导出缠论结构快照。
 
     Raises:
         ValueError: 参数或数据不足
         RuntimeError: 行情/引擎失败
     """
-    _apply_chanpy_root()
+    _apply_chan_engine_root()
     binance_symbol, display_symbol = _normalize_symbol(symbol)
     interval = normalize_interval(timeframe)
     limit = cap_limit(interval, lookback)
@@ -272,7 +272,7 @@ def build_chan_structure_snapshot(
         }
         for k in raw
     ]
-    icl = _run_chanpy(display_symbol, interval, engine_klines)
+    icl = _run_chan_engine(display_symbol, interval, engine_klines)
     latest_price = float(raw[-1]["close"])
 
     all_bis = icl.get_bis()

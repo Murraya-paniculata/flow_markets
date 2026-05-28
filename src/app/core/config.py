@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     # 深度调研 Demo：报告输出根目录（每次运行会在其下创建子目录）
     deep_research_output_dir: str = "./data/deep_research"
 
-    # 缠论 chanpy 根目录（可选；默认使用仓库内 flow_markets/chanpy/）
-    chanpy_root: str = ""
+    # 缠论结构引擎根目录（可选；默认使用仓库内 vendored 计算库）
+    chan_engine_root: str = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -62,6 +62,12 @@ class Settings(BaseSettings):
         if not isinstance(data, dict):
             return data
         out = dict(data)
+        if not (out.get("chan_engine_root") or "").strip():
+            out["chan_engine_root"] = (
+                (out.get("chanpy_root") or "").strip()
+                or os.environ.get("APP_CHAN_ENGINE_ROOT", "").strip()
+                or os.environ.get("APP_CHANPY_ROOT", "").strip()
+            )
         if not (out.get("llm_api_key") or "").strip():
             out["llm_api_key"] = (
                 os.environ.get("QWEN_API_KEY", "").strip()

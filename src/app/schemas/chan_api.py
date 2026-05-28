@@ -15,7 +15,7 @@ class ChanKlineChartMeta(BaseModel):
     merged_count: int = 0
     count: int = 0
     limit: int = 0
-    engine: str = "chanpy"
+    engine: str = "structure-engine"
 
 
 class ChanKlineChartResponse(BaseModel):

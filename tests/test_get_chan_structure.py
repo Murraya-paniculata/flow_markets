@@ -10,8 +10,9 @@ import pytest
 
 from app.crews.tools.get_chan_structure import GetChanStructureTool
 from app.schemas.chan_structure import ChanStructureSnapshot
-from app.services.chan.backend import ChanpyICL
-from app.services.chan.structure import build_chan_structure_snapshot
+from app.services.chan.backend import ENGINE_ID, ChanEngineICL
+from app.services.chan.structure import _bi_item, _segment_item, build_chan_structure_snapshot
+from app.services.chan.types import SimpleBi, SimpleFX, SimpleXD
 
 
 def _synthetic_klines(n: int = 120) -> list[dict]:
@@ -38,6 +39,21 @@ def _synthetic_klines(n: int = 120) -> list[dict]:
     return rows
 
 
+def test_bi_and_segment_is_done_follow_engine():
+    """0.2.1：导出 JSON 的 is_done 须来自引擎笔/段确认状态，不得写死 True。"""
+    t = datetime.now()
+    fx = SimpleFX("ding", 0, None, 100.0, t, 0)
+    done_bi = SimpleBi(0, "up", fx, fx, 0, 1, is_done=True)
+    open_bi = SimpleBi(1, "down", fx, fx, 1, 2, is_done=False)
+    assert _bi_item(done_bi).is_done is True
+    assert _bi_item(open_bi).is_done is False
+
+    seg_done = SimpleXD(0, "up", done_bi, done_bi, [done_bi], is_done=True)
+    seg_open = SimpleXD(1, "down", open_bi, open_bi, [open_bi], is_done=False)
+    assert _segment_item(seg_done).is_done is True
+    assert _segment_item(seg_open).is_done is False
+
+
 def test_snapshot_schema_from_synthetic_klines():
     raw = _synthetic_klines(120)
     engine = [
@@ -52,23 +68,27 @@ def test_snapshot_schema_from_synthetic_klines():
         for k in raw
     ]
     df = pd.DataFrame(engine)
-    icl = ChanpyICL("BTC/USDT", "1h", {}).process_klines(df)
+    icl = ChanEngineICL("BTC/USDT", "1h", {}).process_klines(df)
 
     with patch(
         "app.services.chan.structure.get_klines_beijing",
         return_value=raw,
     ):
         with patch(
-            "app.services.chan.structure._run_chanpy",
+            "app.services.chan.structure._run_chan_engine",
             return_value=icl,
         ):
             snap = build_chan_structure_snapshot("BTCUSDT", "1h", lookback=120)
 
     validated = ChanStructureSnapshot.model_validate(snap.model_dump())
-    assert validated.meta.engine == "chanpy"
+    assert validated.meta.engine == ENGINE_ID
     assert validated.meta.data_size.kline == 120
     assert validated.market.latest_price == raw[-1]["close"]
     assert validated.structure_summary.trend_description
+    # 最后一笔/段可能为未确认；导出须保留布尔值而非一律 True
+    assert isinstance(validated.bi[-1].is_done, bool)
+    if len(validated.segment) > 0:
+        assert isinstance(validated.segment[-1].is_done, bool)
 
 
 def test_tool_returns_ok_envelope():
@@ -85,14 +105,14 @@ def test_tool_returns_ok_envelope():
         for k in raw
     ]
     df = pd.DataFrame(engine)
-    icl = ChanpyICL("ETH/USDT", "4h", {}).process_klines(df)
+    icl = ChanEngineICL("ETH/USDT", "4h", {}).process_klines(df)
 
     with patch(
         "app.services.chan.structure.get_klines_beijing",
         return_value=raw,
     ):
         with patch(
-            "app.services.chan.structure._run_chanpy",
+            "app.services.chan.structure._run_chan_engine",
             return_value=icl,
         ):
             out = GetChanStructureTool()._run(symbol="ETHUSDT", timeframe="4h", lookback=80)

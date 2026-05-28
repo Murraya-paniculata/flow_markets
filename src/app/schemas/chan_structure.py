@@ -19,7 +19,7 @@ class ChanMeta(BaseModel):
     symbol: str
     interval: str
     timestamp: str
-    engine: str = "chanpy"
+    engine: str = "structure-engine"
     engine_version: str = "flow-markets-v1"
     data_size: ChanDataSize
     trim: dict[str, int] | None = Field(

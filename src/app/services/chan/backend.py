@@ -1,4 +1,4 @@
-"""内置 chanpy（Vespa314/chan.py）适配：计算缠论并转为 API 用的结构对象。"""
+"""内置缠论结构引擎：计算笔/段/中枢/买卖点并转为 API 用的结构对象。"""
 from __future__ import annotations
 
 import logging
@@ -21,9 +21,12 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
-_CHANPY_ROOT: Optional[Path] = None
+_CHAN_ENGINE_ROOT: Optional[Path] = None
+ENGINE_ID = "structure-engine"
+# 内置计算库目录名（仓库内 vendored 包，业务代码不对外暴露实现名）
+_BUNDLED_ENGINE_DIRNAME = "chanpy"
 
-# Binance interval -> chan.py KL_TYPE
+# Binance interval -> 引擎 KL_TYPE 枚举名
 INTERVAL_TO_KL_TYPE: Dict[str, str] = {
     "5m": "K_5M",
     "15m": "K_15M",
@@ -39,44 +42,57 @@ INTERVAL_TO_KL_TYPE: Dict[str, str] = {
 }
 
 
-def _is_chanpy_repo_dir(path: Path) -> bool:
+def _is_engine_repo_dir(path: Path) -> bool:
     return path.is_dir() and (path / "Chan.py").is_file() and (path / "Common").is_dir()
 
 
-def _bundled_chanpy_dir() -> Path:
-    return Path(__file__).resolve().parents[4] / "chanpy"
+def _bundled_engine_dir() -> Path:
+    return Path(__file__).resolve().parents[4] / _BUNDLED_ENGINE_DIRNAME
 
 
-def get_chanpy_root() -> Path:
-    global _CHANPY_ROOT
-    if _CHANPY_ROOT is not None:
-        return _CHANPY_ROOT
+def _legacy_engine_root_env() -> str:
+    for key in (
+        "CHAN_ENGINE_ROOT",
+        "APP_CHAN_ENGINE_ROOT",
+        "CHANPY_ROOT",
+        "APP_CHANPY_ROOT",
+    ):
+        val = (os.environ.get(key) or "").strip()
+        if val:
+            return val
+    return ""
 
-    env_root = os.environ.get("CHANPY_ROOT") or os.environ.get("APP_CHANPY_ROOT")
+
+def get_chan_engine_root() -> Path:
+    global _CHAN_ENGINE_ROOT
+    if _CHAN_ENGINE_ROOT is not None:
+        return _CHAN_ENGINE_ROOT
+
+    env_root = _legacy_engine_root_env()
     if env_root:
         root = Path(env_root).resolve()
-        if _is_chanpy_repo_dir(root):
-            _CHANPY_ROOT = root
+        if _is_engine_repo_dir(root):
+            _CHAN_ENGINE_ROOT = root
             return root
 
-    bundled = _bundled_chanpy_dir()
-    if _is_chanpy_repo_dir(bundled):
-        _CHANPY_ROOT = bundled
+    bundled = _bundled_engine_dir()
+    if _is_engine_repo_dir(bundled):
+        _CHAN_ENGINE_ROOT = bundled
         return bundled
 
-    raise ImportError(f"未找到 chanpy 目录: {bundled}")
+    raise ImportError(f"未找到缠论结构引擎目录: {bundled}")
 
 
-def ensure_chanpy_importable() -> Path:
-    root = get_chanpy_root()
+def ensure_chan_engine_importable() -> Path:
+    root = get_chan_engine_root()
     root_str = str(root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
     return root
 
 
-def _import_chanpy():
-    ensure_chanpy_importable()
+def _import_chan_engine():
+    ensure_chan_engine_importable()
     from Chan import CChan  # noqa: WPS433
     from ChanConfig import CChanConfig
     from Common.CEnum import AUTYPE, BI_DIR, BSP_TYPE, DATA_FIELD, DATA_SRC, FX_TYPE, KL_TYPE
@@ -104,7 +120,7 @@ def ctime_to_datetime(t: Any) -> datetime:
 
 
 def interval_to_kl_type(frequency: str) -> Any:
-    KL_TYPE = _import_chanpy()[6]
+    KL_TYPE = _import_chan_engine()[6]
     key = INTERVAL_TO_KL_TYPE.get(frequency, "K_DAY")
     return getattr(KL_TYPE, key)
 
@@ -121,7 +137,7 @@ def _row_to_ctime(row: Any, CTime: Any) -> Any:  # noqa: N803
 
 
 def dataframe_to_ckline_units(df: pd.DataFrame) -> List[Any]:
-    _, _, _, DATA_FIELD, _, _, _, CTime, CKLine_Unit, _, _ = _import_chanpy()
+    _, _, _, DATA_FIELD, _, _, _, CTime, CKLine_Unit, _, _ = _import_chan_engine()
     units = []
     for _, row in df.iterrows():
         t = _row_to_ctime(row, CTime)
@@ -140,8 +156,13 @@ def dataframe_to_ckline_units(df: pd.DataFrame) -> List[Any]:
     return units
 
 
-def build_cchan(klu_list: List[Any], lv: Any, code: str, chanpy_options: Optional[Dict[str, Any]] = None) -> Any:
-    CChan, CChanConfig, AUTYPE, _, DATA_SRC, _, _, _, _, _, _ = _import_chanpy()
+def build_cchan(
+    klu_list: List[Any],
+    lv: Any,
+    code: str,
+    engine_options: Optional[Dict[str, Any]] = None,
+) -> Any:
+    CChan, CChanConfig, AUTYPE, _, DATA_SRC, _, _, _, _, _, _ = _import_chan_engine()
     opts = {
         "bi_strict": True,
         "trigger_step": True,
@@ -155,8 +176,8 @@ def build_cchan(klu_list: List[Any], lv: Any, code: str, chanpy_options: Optiona
         "print_warning": False,
         "zs_algo": "normal",
     }
-    if chanpy_options:
-        opts.update(chanpy_options)
+    if engine_options:
+        opts.update(engine_options)
 
     config = CChanConfig(opts)
     chan = CChan(
@@ -363,8 +384,8 @@ def _attach_bsp_mmds(
             xds[seg_idx].mmds.append(_bsp_to_mmd(bsp, zs_map, BSP_TYPE))
 
 
-class ChanpyICL:
-    """chanpy 计算结果封装（笔/段/中枢/买卖点）。"""
+class ChanEngineICL:
+    """缠论结构引擎计算结果封装（笔/段/中枢/买卖点）。"""
 
     def __init__(self, code: str, frequency: str, config: Optional[Dict[str, Any]] = None):
         self.code = code
@@ -381,20 +402,20 @@ class ChanpyICL:
         self._fx_list: List[SimpleFX] = []
         self._bsp_chart: List[Dict[str, Any]] = []
 
-    def process_klines(self, df: pd.DataFrame) -> "ChanpyICL":
+    def process_klines(self, df: pd.DataFrame) -> "ChanEngineICL":
         if len(df) == 0:
             return self
 
-        ensure_chanpy_importable()
-        _imp = _import_chanpy()
+        ensure_chan_engine_importable()
+        _imp = _import_chan_engine()
         FX_TYPE = _imp[5]
         BSP_TYPE = _imp[10]
 
         self._raw_df = df.copy()
         lv = interval_to_kl_type(self.frequency)
         klu_list = dataframe_to_ckline_units(df)
-        chanpy_opts = self.config.get("chanpy") if isinstance(self.config.get("chanpy"), dict) else {}
-        self._chan = build_cchan(klu_list, lv, self.code, chanpy_opts)
+        engine_opts = self.config.get("engine") if isinstance(self.config.get("engine"), dict) else {}
+        self._chan = build_cchan(klu_list, lv, self.code, engine_opts)
 
         kl_data = self._chan[0]
         self._merged_klines = [_klc_to_merged(klc, klc.idx) for klc in kl_data.lst]
@@ -433,7 +454,7 @@ class ChanpyICL:
         self._bsp_chart = _collect_bsp_chart(kl_data, self._merged_klines)
 
         logger.info(
-            "[chanpy] %s %s: merged_k=%d bi=%d xd=%d bi_zs=%d",
+            "[chan-engine] %s %s: merged_k=%d bi=%d xd=%d bi_zs=%d",
             self.code,
             self.frequency,
             len(self._merged_klines),

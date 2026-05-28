@@ -62,7 +62,7 @@ class GetChanStructureTool(BaseTool):
     """
     获取缠论结构快照 JSON（笔/线段/中枢/买卖点/structure_summary）。
 
-    内部流程：拉取 K 线 → chanpy 计算 → 裁剪为 Agent 可消费的紧凑 JSON。
+    内部流程：拉取 K 线 → 缠论结构引擎计算 → 裁剪为 Agent 可消费的紧凑 JSON。
     禁止 Agent 自行编造笔、中枢或买卖点；解读须引用本工具返回字段。
     """
 
@@ -119,7 +119,7 @@ class GetChanStructureTool(BaseTool):
         except ValueError as exc:
             return self._fail("INSUFFICIENT_DATA", str(exc), _hint_for_value_error(exc))
         except RuntimeError as exc:
-            return self._fail("UPSTREAM_ERROR", str(exc), "请检查网络或稍后重试 Binance/chanpy。")
+            return self._fail("UPSTREAM_ERROR", str(exc), "请检查网络或稍后重试行情/结构计算。")
         except Exception as exc:
             logger.exception("get_chan_structure_error", error=str(exc))
             return self._fail(

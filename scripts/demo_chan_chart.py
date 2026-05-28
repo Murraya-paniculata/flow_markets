@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""缠论验图：Binance K 线 → chanpy → PNG（用法见 README 缠论一节）。"""
+"""缠论验图：Binance K 线 → 结构引擎 → PNG（用法见 README 缠论一节）。"""
 from __future__ import annotations
 
 import os
@@ -20,7 +20,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 from app.services.chan.backend import (  # noqa: E402
     build_cchan,
     dataframe_to_ckline_units,
-    ensure_chanpy_importable,
+    ensure_chan_engine_importable,
     interval_to_kl_type,
 )
 from app.services.chan.kline import (  # noqa: E402
@@ -57,7 +57,7 @@ def _load_df() -> pd.DataFrame:
 
 
 def main() -> None:
-    ensure_chanpy_importable()
+    ensure_chan_engine_importable()
     from Plot.PlotDriver import CPlotDriver  # noqa: WPS433
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

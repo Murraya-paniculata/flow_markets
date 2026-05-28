@@ -16,7 +16,7 @@ logger = get_logger(__name__)
     "/kline/{symbol}/{interval}",
     response_model=ApiResponse[ChanKlineChartResponse],
     summary="K 线 + 缠论结构（chan.py）",
-    description="Binance K 线（北京时间 5m 聚合）+ 内置 chanpy 缠论结构。",
+    description="Binance K 线（北京时间 5m 聚合）+ 内置缠论结构计算。",
 )
 async def get_kline_chart(
     symbol: str,

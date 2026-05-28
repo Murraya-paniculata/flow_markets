@@ -34,7 +34,7 @@
 | symbol | 如 `BTC/USDT` |
 | interval | 如 `1h`、`4h` |
 | timestamp | ISO 时间 |
-| engine | 固定 `chanpy` |
+| engine | 固定 `structure-engine` |
 | data_size.kline | 参与计算的 K 线根数 |
 | data_size.bi | 引擎识别笔总数 |
 | data_size.segment | 线段总数 |

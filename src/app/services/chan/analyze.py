@@ -8,7 +8,7 @@ import pandas as pd
 
 from app.core.config import get_settings
 
-from .backend import ChanpyICL
+from .backend import ENGINE_ID, ChanEngineICL
 from .chart import (
     bi_to_chart_json,
     fx_to_chart_json,
@@ -31,20 +31,20 @@ def _chart_dt(dt: Any) -> str:
     return s
 
 
-def _apply_chanpy_root() -> None:
-    root = (get_settings().chanpy_root or "").strip()
-    if root and not os.environ.get("CHANPY_ROOT"):
-        os.environ["CHANPY_ROOT"] = root
+def _apply_chan_engine_root() -> None:
+    root = (get_settings().chan_engine_root or "").strip()
+    if root and not os.environ.get("CHAN_ENGINE_ROOT"):
+        os.environ["CHAN_ENGINE_ROOT"] = root
 
 
-def _run_chanpy(code: str, frequency: str, klines: List[Dict[str, Any]]) -> ChanpyICL:
+def _run_chan_engine(code: str, frequency: str, klines: List[Dict[str, Any]]) -> ChanEngineICL:
     if len(klines) < 50:
         raise ValueError(f"K 线数量不足，至少需要 50 根，当前 {len(klines)} 根")
     df = pd.DataFrame(klines)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     if df["date"].isna().any():
         raise ValueError("K 线 date 字段无效")
-    return ChanpyICL(code, frequency, {}).process_klines(df)
+    return ChanEngineICL(code, frequency, {}).process_klines(df)
 
 
 def build_kline_chart_payload(
@@ -52,7 +52,7 @@ def build_kline_chart_payload(
     interval: str,
     limit: int = 350,
 ) -> Dict[str, Any]:
-    _apply_chanpy_root()
+    _apply_chan_engine_root()
 
     interval_norm = normalize_interval(interval)
     effective_limit = cap_limit(interval_norm, limit)
@@ -71,7 +71,7 @@ def build_kline_chart_payload(
         }
         for k in raw
     ]
-    icl = _run_chanpy(symbol, interval_norm, engine_klines)
+    icl = _run_chan_engine(symbol, interval_norm, engine_klines)
 
     bi_zs = icl.get_bi_zss()
     xd_zs = icl.get_xd_zss() if hasattr(icl, "get_xd_zss") else []
@@ -95,7 +95,7 @@ def build_kline_chart_payload(
             "merged_count": merged_len,
             "count": len(frontend_bars),
             "limit": effective_limit,
-            "engine": "chanpy",
+            "engine": ENGINE_ID,
         },
         "klines": frontend_bars,
         "merged_klines": merged_json,
