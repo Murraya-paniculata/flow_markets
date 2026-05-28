@@ -155,6 +155,22 @@ def _count_centers(icl: ChanEngineICL) -> int:
     return n
 
 
+def _build_trim_meta(
+    *,
+    total_bi: int,
+    total_segment: int,
+    max_bi: int,
+    max_segment: int,
+) -> dict[str, int] | None:
+    """若 bi/segment 列表被条数上限裁剪，在 meta.trim 中记录上限（与 chanlun exporter 契约一致）。"""
+    trim: dict[str, int] = {}
+    if total_bi > max_bi:
+        trim["bi"] = max_bi
+    if total_segment > max_segment:
+        trim["segment"] = max_segment
+    return trim or None
+
+
 def _build_structure_summary(
     icl: ChanEngineICL,
     latest_price: float,
@@ -283,6 +299,9 @@ def build_chan_structure_snapshot(
     for zs in icl.get_xd_zss():
         centers.append(_center_item(zs, "segment"))
 
+    export_bis = all_bis[-max_bi:] if max_bi > 0 else []
+    export_segments = all_xds[-max_segment:] if max_segment > 0 else []
+
     meta = ChanMeta(
         symbol=display_symbol,
         interval=interval,
@@ -293,14 +312,19 @@ def build_chan_structure_snapshot(
             segment=len(all_xds),
             center=_count_centers(icl),
         ),
-        trim=None,
+        trim=_build_trim_meta(
+            total_bi=len(all_bis),
+            total_segment=len(all_xds),
+            max_bi=max_bi,
+            max_segment=max_segment,
+        ),
     )
 
     return ChanStructureSnapshot(
         meta=meta,
         market=ChanMarket(latest_price=latest_price),
-        bi=[_bi_item(b) for b in all_bis[-max_bi:]],
-        segment=[_segment_item(x) for x in all_xds[-max_segment:]],
+        bi=[_bi_item(b) for b in export_bis],
+        segment=[_segment_item(x) for x in export_segments],
         center=centers,
         signal=_collect_signals(icl),
         structure_summary=_build_structure_summary(icl, latest_price),

@@ -11,7 +11,12 @@ import pytest
 from app.crews.tools.get_chan_structure import GetChanStructureTool
 from app.schemas.chan_structure import ChanStructureSnapshot
 from app.services.chan.backend import ENGINE_ID, ChanEngineICL
-from app.services.chan.structure import _bi_item, _segment_item, build_chan_structure_snapshot
+from app.services.chan.structure import (
+    _bi_item,
+    _build_trim_meta,
+    _segment_item,
+    build_chan_structure_snapshot,
+)
 from app.services.chan.types import SimpleBi, SimpleFX, SimpleXD
 
 
@@ -37,6 +42,16 @@ def _synthetic_klines(n: int = 120) -> list[dict]:
             }
         )
     return rows
+
+
+def test_build_trim_meta_only_when_trimmed():
+    assert _build_trim_meta(total_bi=20, total_segment=3, max_bi=15, max_segment=5) == {
+        "bi": 15,
+    }
+    assert _build_trim_meta(total_bi=10, total_segment=8, max_bi=15, max_segment=5) == {
+        "segment": 5,
+    }
+    assert _build_trim_meta(total_bi=10, total_segment=3, max_bi=15, max_segment=5) is None
 
 
 def test_bi_and_segment_is_done_follow_engine():
@@ -89,6 +104,47 @@ def test_snapshot_schema_from_synthetic_klines():
     assert isinstance(validated.bi[-1].is_done, bool)
     if len(validated.segment) > 0:
         assert isinstance(validated.segment[-1].is_done, bool)
+
+
+def test_meta_trim_when_lists_cropped():
+    """0.2.2：导出列表裁剪时 meta.trim 记录上限；data_size 仍为引擎全量计数。"""
+    raw = _synthetic_klines(120)
+    engine = [
+        {
+            "date": k["open_time"],
+            "open": k["open"],
+            "high": k["high"],
+            "low": k["low"],
+            "close": k["close"],
+            "volume": 0.0,
+        }
+        for k in raw
+    ]
+    df = pd.DataFrame(engine)
+    icl = ChanEngineICL("BTC/USDT", "1h", {}).process_klines(df)
+    total_bi = len(icl.get_bis())
+    total_seg = len(icl.get_xds())
+    max_bi, max_seg = 5, 1
+
+    with patch("app.services.chan.structure.get_klines_beijing", return_value=raw):
+        with patch("app.services.chan.structure._run_chan_engine", return_value=icl):
+            snap = build_chan_structure_snapshot(
+                "BTCUSDT",
+                "1h",
+                lookback=120,
+                max_bi=max_bi,
+                max_segment=max_seg,
+            )
+
+    assert snap.meta.data_size.bi == total_bi
+    assert snap.meta.data_size.segment == total_seg
+    assert len(snap.bi) == min(total_bi, max_bi)
+    assert len(snap.segment) == min(total_seg, max_seg)
+    assert snap.meta.trim is not None
+    if total_bi > max_bi:
+        assert snap.meta.trim.get("bi") == max_bi
+    if total_seg > max_seg:
+        assert snap.meta.trim.get("segment") == max_seg
 
 
 def test_tool_returns_ok_envelope():
