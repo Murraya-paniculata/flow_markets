@@ -177,6 +177,8 @@ def test_tool_returns_ok_envelope():
     assert payload["ok"] is True
     assert payload["partial"] is False
     assert "data" in payload
+    assert "history" in payload
+    assert "system_stats" in payload["history"]
     assert payload["data"]["meta"]["symbol"] == "ETH/USDT"
 
 

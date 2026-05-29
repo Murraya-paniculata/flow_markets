@@ -18,10 +18,10 @@ description: >
 
 ## 一、读入工具 JSON
 
-信封：`{ "ok": true|false, "data": { ... } }`
+信封：`{ "ok": true|false, "partial": false, "data": { ... }, "history": { ... } }`
 
 - `ok=false`：只填 `brief`（`data_status=待K线数据`，`missing_data_checklist` 含 error_code/message/hint），`chanlun_v2=null`，`analysis_markdown` 留空。
-- `ok=true`：只把 `data` 当事实来源。
+- `ok=true`：**结构事实只认 `data`**；`history` 为历史评估统计，不得当作当前笔/中枢/价位来源。
 
 | `data` 字段 | 含义 |
 |-------------|------|
@@ -32,6 +32,29 @@ description: >
 | `center[]` | 中枢：zg/zd/gg/dd、relation(new/extend)、type |
 | `signal.buy_sell_points` / `signal.divergences` | 汇总信号 |
 | `structure_summary` | trend、price_position、key_levels、strength_comparison、trend_description |
+
+### 1.1 `history`（系统历史胜率，Phase 2.4+）
+
+| 字段 | 用法 |
+|------|------|
+| `history.available=false` | 无已评估样本；**仅按结构**分析，不因历史强制降级 |
+| `history.system_stats` | 整体/标的/周期命中率；可读 `prompt_text` 摘要 |
+| `history.state_machine_hints.recommended_floor` | 服务端建议的状态机下限（与 chanlun 阈值一致） |
+
+**状态机阈值**（`history.available=true` 且 `state_machine_hints.basis_hit_rate` 有值时）：
+
+| 胜率（优先 `for_symbol`，样本≥5） | `current_state` 约束 |
+|-----------------------------------|----------------------|
+| &lt; 25% | 必须 `OBSERVE_ONLY` |
+| 25%～35% | 不得 `STRATEGY_ACTIVE`，至少 `WAIT_CONFIRMATION` |
+| &gt; 35% | 可按结构选 `STRATEGY_ACTIVE`（仍受 extend/笔未完成约束） |
+
+若存在 `recommended_floor` 且与结构推断冲突，采用 **更保守** 状态，并在 `risk_notes` 说明。
+
+- **禁止**：在「技术形态概述」用历史编造当前 ZG/ZD；在 **第六节风险** 可写 1 条历史胜率提示。
+- `similar_cases` / `learning_feedback` 占位字段在后续 Phase 启用前 **忽略**。
+
+详见 [references/history-envelope.md](references/history-envelope.md)。
 
 ---
 
@@ -157,7 +180,7 @@ JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态
 
 ## 六、执行检查清单（输出前自检）
 
-- [ ] 已调用工具且仅使用 `data` 中的笔/中枢/信号
+- [ ] 已调用工具；结构仅用 `data`；若 `history.available` 则状态机符合阈值或 `risk_notes` 说明
 - [ ] `analysis_markdown` 含六节且概率约 100%
 - [ ] `chanlun_v2.version=2.0` 且 `state_machine` 字段完整
 - [ ] 未使用技术指标/新闻作为依据
@@ -168,6 +191,7 @@ JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态
 ## 附录（字段明细，可选查阅）
 
 - [references/input-envelope.md](references/input-envelope.md)
+- [references/history-envelope.md](references/history-envelope.md)
 - [references/structure-priority.md](references/structure-priority.md)
 
 `references/output-schema.md` 为旧版 scenarios 形态，**本任务不使用**。

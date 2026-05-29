@@ -126,10 +126,25 @@ class ChanStructureSnapshot(BaseModel):
     context: ChanContext = Field(default_factory=ChanContext)
 
 
+class AnalysisHistoryBlock(BaseModel):
+    """get_chan_structure 返回的历史记忆块（结构事实仍在 data 内）。"""
+
+    available: bool = False
+    reason: str | None = None
+    message: str | None = None
+    db_samples_evaluated: int = 0
+    context_match: dict[str, str] = Field(default_factory=dict)
+    system_stats: dict[str, Any] = Field(default_factory=dict)
+    state_machine_hints: dict[str, Any] = Field(default_factory=dict)
+    similar_cases: dict[str, Any] = Field(default_factory=dict)
+    learning_feedback: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChanToolSuccess(BaseModel):
     ok: Literal[True] = True
-    partial: Literal[False] = False
+    partial: bool = False
     data: ChanStructureSnapshot
+    history: AnalysisHistoryBlock = Field(default_factory=AnalysisHistoryBlock)
 
 
 class ChanToolFailure(BaseModel):

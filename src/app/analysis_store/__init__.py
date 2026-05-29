@@ -9,6 +9,7 @@ from app.analysis_store.db_manager import (
     safe_json_dumps,
     safe_json_loads,
 )
+from app.analysis_store.history_builder import build_history_block
 from app.analysis_store.outcome import (
     evaluate_outcome,
     evaluate_pending_snapshots,
@@ -19,6 +20,12 @@ from app.analysis_store.persist import (
     save_technical_deliverable,
     should_persist_analysis,
 )
+
+from app.analysis_store.stats_formatter import (
+    format_stats_for_prompt,
+    get_stats_summary,
+)
+from app.analysis_store.stats_service import calculate_accuracy, count_evaluated_samples
 
 __all__ = [
     "get_db_conn",
@@ -34,4 +41,9 @@ __all__ = [
     "evaluate_outcome",
     "evaluate_pending_snapshots",
     "extract_scenario_for_eval",
+    "build_history_block",
+    "calculate_accuracy",
+    "count_evaluated_samples",
+    "format_stats_for_prompt",
+    "get_stats_summary",
 ]

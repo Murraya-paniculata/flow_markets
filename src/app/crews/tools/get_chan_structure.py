@@ -8,8 +8,13 @@ import sys
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field, field_validator
 
+from app.analysis_store.history_builder import build_history_block
 from app.observability.logging import get_logger
-from app.schemas.chan_structure import ChanToolFailure, ChanToolSuccess
+from app.schemas.chan_structure import (
+    AnalysisHistoryBlock,
+    ChanToolFailure,
+    ChanToolSuccess,
+)
 from app.services.chan.structure import (
     DEFAULT_LOOKBACK,
     build_chan_structure_snapshot,
@@ -72,6 +77,8 @@ class GetChanStructureTool(BaseTool):
         "返回内容包括：meta（标的/周期/数据条数）、market.latest_price、"
         "最近若干笔(bi)、线段(segment)、中枢(center)、买卖点汇总(signal)、"
         "以及 structure_summary（趋势/价格相对中枢位置/力度对比/关键价位）。"
+        "另含 history：系统历史胜率 system_stats、state_machine_hints（样本不足时不强制降级）；"
+        "结构事实仍只认 data，history 仅用于置信度与状态机。"
         "技术分析师应优先依据本工具输出撰写结构结论，不得虚构工具未返回的笔或中枢。"
         f"参数：symbol（必填）、timeframe（默认 1h，支持 {SUPPORTED_TIMEFRAMES}）、"
         f"lookback（默认 {DEFAULT_LOOKBACK}，≥50）。"
@@ -105,7 +112,14 @@ class GetChanStructureTool(BaseTool):
                 print(f"   ✓ 获取到 {n} 根 K 线", file=sys.stderr, flush=True)
                 print("   ✓ 缠论结构计算完成", file=sys.stderr, flush=True)
                 print("   ✓ 结构快照构造完成", file=sys.stderr, flush=True)
-            envelope = ChanToolSuccess(data=snapshot)
+            history_dict = build_history_block(snapshot)
+            history_block = AnalysisHistoryBlock.model_validate(history_dict)
+            partial = not history_block.available and history_block.reason == "QUERY_ERROR"
+            envelope = ChanToolSuccess(
+                data=snapshot,
+                history=history_block,
+                partial=partial,
+            )
             payload = envelope.model_dump(mode="json")
             text = json.dumps(payload, ensure_ascii=False, indent=2)
             logger.info(
