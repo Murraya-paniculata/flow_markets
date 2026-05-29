@@ -21,6 +21,21 @@
 }
 ```
 
+## `similar_cases`（Phase 2.5）
+
+| 字段 | 说明 |
+|------|------|
+| `has_data` | 是否检索到 ≥1 条相似已评估案例 |
+| `threshold_used` | 相似度阈值（默认 40，不足 3 条时降至 20） |
+| `count` / `win_rate` / `avg_score` | 相似案例聚合 |
+| `avg_favorable_move_pct` / `avg_adverse_move_pct` | 平均有利/不利变动 |
+| `confidence` / `suggestion` | 历史建议与置信度档位 |
+| `by_direction` | 按预测方向分组胜率 |
+| `top_cases` | 最相似 5 条（含 `similarity_score`） |
+| `prompt_text` | 中文摘要（对齐 chanlun history_context） |
+
+相似度维度：symbol、interval、signal_type、trend、price_position、strength_comparison；可选方向匹配 +10；30 天半衰期时间衰减。
+
 ## `system_stats`（Phase 2.4）
 
 | 字段 | 说明 |
@@ -36,6 +51,8 @@
 | 字段 | 说明 |
 |------|------|
 | `recommended_floor` | `OBSERVE_ONLY` / `WAIT_CONFIRMATION` / null |
+| `system_floor` | 仅由全库 `system_stats` 推导的下限 |
+| `similar_cases_floor` | 仅由 `similar_cases.win_rate` 推导的下限（≥3 条） |
 | `basis_hit_rate` | 0～1，用于降级的胜率 |
 | `basis` | `for_symbol` / `for_interval` / `overall` |
 | `min_win_rate_observe_only` | 0.25 |

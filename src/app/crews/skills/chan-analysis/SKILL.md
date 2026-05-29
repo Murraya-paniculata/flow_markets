@@ -52,7 +52,8 @@ description: >
 若存在 `recommended_floor` 且与结构推断冲突，采用 **更保守** 状态，并在 `risk_notes` 说明。
 
 - **禁止**：在「技术形态概述」用历史编造当前 ZG/ZD；在 **第六节风险** 可写 1 条历史胜率提示。
-- `similar_cases` / `learning_feedback` 占位字段在后续 Phase 启用前 **忽略**。
+- `similar_cases`（Phase 2.5）：结构相似的历史案例胜率与 `prompt_text`；与 `system_stats` 一并参考，取更保守状态。
+- `learning_feedback` 占位字段在 Phase 2.6 启用前 **忽略**。
 
 详见 [references/history-envelope.md](references/history-envelope.md)。
 

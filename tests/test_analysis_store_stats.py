@@ -133,3 +133,5 @@ def test_build_history_block_on_snapshot(stats_db: Path) -> None:
         "WAIT_CONFIRMATION",
         None,
     )
+    assert "has_data" in hist["similar_cases"]
+    assert "prompt_text" in hist["similar_cases"]

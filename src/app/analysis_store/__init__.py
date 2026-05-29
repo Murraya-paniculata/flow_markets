@@ -10,6 +10,7 @@ from app.analysis_store.db_manager import (
     safe_json_loads,
 )
 from app.analysis_store.history_builder import build_history_block
+from app.analysis_store.similar_cases import build_similar_cases_block, search_similar_cases
 from app.analysis_store.outcome import (
     evaluate_outcome,
     evaluate_pending_snapshots,
@@ -42,6 +43,8 @@ __all__ = [
     "evaluate_pending_snapshots",
     "extract_scenario_for_eval",
     "build_history_block",
+    "build_similar_cases_block",
+    "search_similar_cases",
     "calculate_accuracy",
     "count_evaluated_samples",
     "format_stats_for_prompt",
