@@ -88,7 +88,7 @@ description: >
 
 | 字段 | 要求 |
 |------|------|
-| `symbol` / `interval` | 与 `data.meta` 一致 |
+| `symbol` / `interval` | 与主分析周期一致：`single` 模式同 `data.meta`；`multi_timeframe` 模式 **interval 固定 1h**（中级别） |
 | `data_status` | `有足够K线` 或 `待K线数据` |
 | `structure_quickview` | 一行式事实：当前价、ZG/ZD、最新笔方向与是否完成、signal 摘要、笔/段数量；**不写推断** |
 | `summary` | **2～3 句**执行摘要（趋势+位置+主推），**不得**粘贴 `analysis_markdown` 全文 |
@@ -105,10 +105,12 @@ description: >
 1～2 段：基于工具数据的缠论结构总览（笔/段/中枢关系）。
 
 ### 二、当前市场状态
-- 最新价格：（`market.latest_price`）
+- 最新价格：（`market.latest_price` 或预注入 `meta.latest_price`）
 - 处于什么级别的中枢内/外
 - 中枢范围变化情况（relation：new/extend 等）
 - 最后一笔的状态（向上/向下，是否完成）
+
+**`multi_timeframe` 模式**：须另起 **「多级别联立」** 小段，写清 4h / 1h / 15m 趋势与位置 + `combined_judgment.resonance`；写法见 [references/markdown-report-template.md](references/markdown-report-template.md#多级别联立模式analysis_modemulti_timeframe）。
 
 ### 三、关键技术信号
 - 买卖点信号：（`signal.buy_sell_points`，无则「无」）
@@ -190,11 +192,21 @@ JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态
 
 ## 六、执行检查清单（输出前自检）
 
-- [ ] 已调用工具；结构仅用 `data`；若 `history.available` 则状态机符合阈值或 `risk_notes` 说明
+**通用**
+
+- [ ] 已调用 `get_chan_structure`；`single` 模式结构仅用工具 `data`；`multi_timeframe` 模式结构以预注入 JSON 为准、工具 `data` 仅作 history 参考
+- [ ] 若 `history.available` 则状态机符合阈值或 `risk_notes` 说明
 - [ ] `analysis_markdown` 含六节且概率约 100%
 - [ ] `chanlun_v2.version=2.0` 且 `state_machine` 字段完整
 - [ ] 未使用技术指标/新闻作为依据
 - [ ] 输出为**单一 JSON 对象**（TechnicalAnalysisDeliverable）
+
+**仅 `multi_timeframe` 模式额外**
+
+- [ ] 第二节含 **多级别联立**（4h / 1h / 15m + `resonance`）
+- [ ] `brief.interval` 与 `chanlun_v2.meta.interval` 均为 **1h**
+- [ ] 第四节概率与 `combined_judgment.main_trend` / `resonance` 一致（mixed 时震荡概率宜最高）
+- [ ] 未用 1h 工具返回的笔/中枢覆盖预注入的大/小级别描述
 
 ---
 
@@ -203,6 +215,7 @@ JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态
 - [references/input-envelope.md](references/input-envelope.md)
 - [references/history-envelope.md](references/history-envelope.md)
 - [references/multi-timeframe-mode.md](references/multi-timeframe-mode.md)
+- [references/markdown-report-template.md](references/markdown-report-template.md)
 - [references/structure-priority.md](references/structure-priority.md)
 
 `references/output-schema.md` 为旧版 scenarios 形态，**本任务不使用**。

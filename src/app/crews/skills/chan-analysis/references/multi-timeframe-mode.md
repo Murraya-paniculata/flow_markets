@@ -84,3 +84,4 @@
 - [ ] 已调 get_chan_structure@1h 取 history
 - [ ] Markdown 体现级别一致/分歧
 - [ ] 未编造预注入 JSON 中不存在的笔/中枢
+- [ ] `analysis_markdown` 满足 [markdown-report-template.md](markdown-report-template.md) 多级别小节（若适用）
