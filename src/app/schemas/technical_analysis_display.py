@@ -5,12 +5,14 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from app.schemas.flow_markets_deliverables import (
+    SignalQualitySummary,
+    TechnicalAnalysisDeliverable,
+)
+
 if TYPE_CHECKING:
     from app.schemas.chan_structure import ChanStructureSnapshot
-    from app.schemas.flow_markets_deliverables import (
-        ChanlunStateMachineOutput,
-        TechnicalAnalysisDeliverable,
-    )
+    from app.schemas.flow_markets_deliverables import ChanlunStateMachineOutput
 
 _WIDTH = 60
 _SEP = "=" * _WIDTH
@@ -265,6 +267,20 @@ def _format_analysis_markdown_block(markdown: str) -> list[str]:
     return lines
 
 
+def format_signal_quality_one_liner(quality: SignalQualitySummary) -> str:
+    """交易者终端一行摘要。"""
+    return (
+        f"📊 信号质量 {quality.total_score:.1f}/100 · "
+        f"{quality.grade}级（{quality.grade_name}）· {quality.action_name}"
+    )
+
+
+def _append_signal_quality_line(out: list[str], deliverable: TechnicalAnalysisDeliverable) -> None:
+    if deliverable.signal_quality is not None:
+        out.append("")
+        out.append(format_signal_quality_one_liner(deliverable.signal_quality))
+
+
 def format_trader_display(
     deliverable: TechnicalAnalysisDeliverable,
 ) -> str:
@@ -313,6 +329,7 @@ def format_trader_display(
         out.extend(_format_analysis_markdown_block(analysis_md))
         if (brief.disclaimer or "").strip():
             out.append(brief.disclaimer.strip())
+        _append_signal_quality_line(out, deliverable)
         out.append("")
         return "\n".join(out)
 
@@ -364,6 +381,7 @@ def format_trader_display(
     out.append(_SEP)
     if (brief.disclaimer or "").strip():
         out.append(f"  {brief.disclaimer.strip()}")
+    _append_signal_quality_line(out, deliverable)
     out.append(_SEP)
     out.append("")
     return "\n".join(out)

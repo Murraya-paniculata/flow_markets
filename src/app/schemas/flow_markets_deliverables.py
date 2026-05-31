@@ -111,6 +111,30 @@ class SentimentAssessment(BaseModel):
     disclaimer: str = Field(..., description=_DISCLAIMER_HINT)
 
 
+SignalQualityAction = Literal["trade", "wait", "skip"]
+SignalQualityGrade = Literal["A", "B", "C", "D"]
+
+
+class SignalQualitySummary(BaseModel):
+    """六维信号质量评分（规则引擎，非 LLM 输出）。"""
+
+    total_score: float = Field(..., ge=0, le=100, description="综合得分 0-100。")
+    grade: SignalQualityGrade = Field(..., description="A/B/C/D 评级。")
+    grade_name: str = Field(..., description="评级中文名，如「良好信号」。")
+    action: SignalQualityAction = Field(..., description="trade / wait / skip。")
+    action_name: str = Field(..., description="建议动作中文，如「可以交易」。")
+    scores: dict[str, float] = Field(default_factory=dict, description="各维度得分。")
+    max_scores: dict[str, float] = Field(default_factory=dict, description="各维度满分。")
+    reasons: dict[str, str] = Field(default_factory=dict, description="各维度评分理由。")
+    advice: str = Field(default="", description="优势/风险摘要。")
+    signal_type: str = Field(default="none", description="归类后的信号类型。")
+    direction: str = Field(default="unknown", description="评分所用主推方向。")
+    weights_optimized: bool = Field(
+        default=False,
+        description="是否使用了 optimized_weights.json。",
+    )
+
+
 class TechnicalBrief(BaseModel):
     """技术分析师交付物：《技术分析摘要》或待数据框架。"""
 
@@ -301,6 +325,10 @@ class TechnicalAnalysisDeliverable(BaseModel):
             "策略状态机 v2.0：含 state_machine、structure_judgement、risk_notes；"
             "get_chan_structure 成功时必填，失败时为 null。"
         ),
+    )
+    signal_quality: SignalQualitySummary | None = Field(
+        default=None,
+        description="六维信号质量评分（治理后由 signal_quality 模块写入，非 LLM 生成）。",
     )
 
 

@@ -16,6 +16,7 @@ from crewai.project import CrewBase, agent, crew, task, tool
 from crewai.tools import BaseTool
 
 from app.analysis_store import save_technical_deliverable, should_persist_analysis
+from app.analysis_store.signal_quality import apply_signal_quality_to_deliverable
 from app.analysis_store.history_builder import build_history_block
 from app.analysis_store.history_enforcement import enforce_deliverable
 from app.core.config import get_settings
@@ -271,6 +272,43 @@ def _apply_history_enforcement(
     return enforced
 
 
+def _apply_signal_quality(
+    deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
+    *,
+    timeframe: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> TechnicalAnalysisDeliverable | dict[str, Any] | None:
+    if not isinstance(deliverable, TechnicalAnalysisDeliverable):
+        return deliverable
+    if deliverable.chanlun_v2 is None:
+        return deliverable
+
+    symbol = (
+        deliverable.chanlun_v2.meta.symbol
+        or deliverable.brief.symbol
+        or symbol_hint
+        or ""
+    ).strip()
+    interval = (
+        deliverable.chanlun_v2.meta.interval
+        or deliverable.brief.interval
+        or timeframe
+    ).strip()
+    if not symbol:
+        return deliverable
+
+    try:
+        snapshot = build_chan_structure_snapshot(symbol, interval, lookback=lookback)
+        return apply_signal_quality_to_deliverable(
+            deliverable,
+            snapshot.model_dump(mode="json"),
+        )
+    except Exception as exc:
+        logger.warning("signal_quality_failed", error=str(exc))
+        return deliverable
+
+
 _ANALYSIS_MODE_SINGLE = "single"
 _ANALYSIS_MODE_MULTI = "multi_timeframe"
 _PRIMARY_TF_MULTI = "1h"
@@ -404,6 +442,12 @@ def run_technical_analyst_only(
         lookback=lookback,
         symbol_hint=symbol,
     )
+    deliverable = _apply_signal_quality(
+        deliverable,
+        timeframe=persist_tf,
+        lookback=lookback,
+        symbol_hint=symbol,
+    )
     _maybe_persist_technical_deliverable(
         deliverable,
         timeframe=persist_tf,
@@ -486,6 +530,12 @@ def run_flow_markets_analysis(
 
     deliverable = _extract_technical_deliverable(result)
     deliverable = _apply_history_enforcement(
+        deliverable,
+        timeframe=persist_tf,
+        lookback=lookback,
+        symbol_hint=symbol,
+    )
+    deliverable = _apply_signal_quality(
         deliverable,
         timeframe=persist_tf,
         lookback=lookback,

@@ -185,6 +185,10 @@ def main() -> int:
     print("\n📋 步骤 3/3: 生成交易者可读报告...")
     if use_trader_display:
         print(format_trader_display(result))
+        if result.signal_quality is not None:
+            from app.analysis_store.signal_quality import format_quality_report
+
+            print(format_quality_report(result.signal_quality))
     else:
         from app.schemas.flow_markets_deliverables import render_task_deliverable
 
