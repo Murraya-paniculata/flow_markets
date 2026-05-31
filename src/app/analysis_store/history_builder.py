@@ -1,4 +1,4 @@
-"""组装 get_chan_structure 的 history 块（Phase 2.4 system_stats + 2.5 similar_cases）。"""
+"""组装 get_chan_structure 的 history 块（Phase 2.4–2.6）。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from app.analysis_store.similar_cases import (
     build_similar_cases_block,
     similar_cases_floor,
 )
+from app.analysis_store.learning_feedback import build_learning_feedback_block
 from app.analysis_store.stats_formatter import (
     bucket_hit_rate,
     format_stats_for_prompt,
@@ -170,13 +171,21 @@ def build_history_block(snapshot: ChanStructureSnapshot) -> dict[str, Any]:
             snapshot,
             context_match=context_match,
         )
+        learning_feedback = build_learning_feedback_block(
+            snapshot,
+            context_match=context_match,
+        )
         hints = compute_state_machine_hints(
             stats,
             symbol,
             interval,
             similar_cases=similar_cases,
         )
-        available = system_stats.get("has_data", False) or similar_cases.get("has_data", False)
+        available = (
+            system_stats.get("has_data", False)
+            or similar_cases.get("has_data", False)
+            or learning_feedback.get("has_data", False)
+        )
         return {
             "available": available,
             "reason": None if available else "NO_SCORABLE_EVALUATED_SAMPLES",
@@ -188,7 +197,7 @@ def build_history_block(snapshot: ChanStructureSnapshot) -> dict[str, Any]:
             "system_stats": system_stats,
             "state_machine_hints": hints,
             "similar_cases": similar_cases,
-            "learning_feedback": {"has_data": False, "message": "Phase 2.6"},
+            "learning_feedback": learning_feedback,
         }
     except Exception as exc:
         logger.warning("build_history_block_failed", error=str(exc))

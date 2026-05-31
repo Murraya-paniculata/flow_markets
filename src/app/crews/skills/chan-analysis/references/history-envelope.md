@@ -60,6 +60,21 @@
 
 样本不足（&lt;5）时不设 `recommended_floor`。
 
+## `learning_feedback`（Phase 2.6）
+
+| 字段 | 说明 |
+|------|------|
+| `has_data` | 最近窗口内可计分样本 ≥5 |
+| `lookback_days` | 默认 30 天 |
+| `total_predictions` / `overall_win_rate` / `overall_avg_score` | 整体表现 |
+| `by_direction` / `by_signal_type` | 分桶胜率与目标偏差 |
+| `error_patterns` | 系统性错误模式（如目标过高、某方向偏弱） |
+| `strengths` / `weaknesses` / `recommendations` | 强项、弱项、改进建议 |
+| `confidence_adjustments` | 方向/信号置信度系数（0.5～1.15） |
+| `prompt_text` | 自我认知中文摘要（对齐 chanlun learning_feedback） |
+
+与 `similar_cases` 区别：`learning_feedback` 看**整体 AI 表现**；`similar_cases` 看**结构相似**子集。
+
 ## 数据来源
 
 仅统计 `analysis_snapshot` 中 `evaluated=1` 且 outcome 可计分（排除 `insufficient_data` 等错误回填）。

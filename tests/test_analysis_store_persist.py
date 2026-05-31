@@ -199,3 +199,4 @@ def test_should_persist_analysis_explicit_and_settings(
         lambda: Settings(_env_file=None, analysis_save=True),
     )
     assert should_persist_analysis(save=None) is True
+    assert should_persist_analysis(save=False) is False

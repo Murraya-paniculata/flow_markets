@@ -9,8 +9,10 @@
   # 仅结构快览（不调 LLM）
   uv run python scripts/flow_markets_ai.py BTCUSDT 1h --no-ai --limit 200
 
-  # 保存结构 JSON + 分析 JSON + 终端文案 .txt
+  # 保存结构 JSON + 分析 JSON + 终端文案 .txt，并强制写入分析记忆库
   uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200 --save
+
+  # 仅落库（不写 output/）：在 .env 设置 APP_ANALYSIS_SAVE=true
 """
 from __future__ import annotations
 
@@ -70,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         action="store_true",
-        help="保存到 output/（结构+分析 JSON）并写入分析记忆库 APP_ANALYSIS_DB_URL",
+        help="保存到 output/（结构+分析 JSON）并强制写入分析记忆库；仅落库可设 APP_ANALYSIS_SAVE=true",
     )
     parser.add_argument(
         "--user-query",
@@ -157,7 +159,7 @@ def main() -> int:
         notes=f"flow_markets_ai.py --table --limit {lookback}",
         timeframe=interval,
         lookback=lookback,
-        save=args.save,
+        save=True if args.save else None,
     )
     if err:
         print(f"   ✗ {err}", file=sys.stderr)

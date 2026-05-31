@@ -53,7 +53,7 @@ description: >
 
 - **禁止**：在「技术形态概述」用历史编造当前 ZG/ZD；在 **第六节风险** 可写 1 条历史胜率提示。
 - `similar_cases`（Phase 2.5）：结构相似的历史案例胜率与 `prompt_text`；与 `system_stats` 一并参考，取更保守状态。
-- `learning_feedback` 占位字段在 Phase 2.6 启用前 **忽略**。
+- `learning_feedback`（Phase 2.6）：AI 整体历史表现、错误模式与 `prompt_text`（自我认知）；样本 ≥5 时注入。
 
 详见 [references/history-envelope.md](references/history-envelope.md)。
 
