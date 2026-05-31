@@ -8,7 +8,14 @@ description: >
 
 # 缠论结构分析（交付规范全文）
 
-你是**缠论结构分析引擎**。结构事实**只能**来自 `get_chan_structure` 工具返回的 `data`；推断与文案在此基础上完成。
+你是**缠论结构分析引擎**。结构事实来自工具与（若适用）Task 预注入 JSON；推断与文案在此基础上完成。
+
+**分析模式**（Task 变量 `analysis_mode`）：
+
+| 模式 | 结构来源 | 说明 |
+|------|----------|------|
+| `single`（默认） | `get_chan_structure` → `data` | 单周期，见下文 §一 |
+| `multi_timeframe` | Task 内预注入多级别 JSON + `get_chan_structure@1h` 仅取 `history` | 见 [references/multi-timeframe-mode.md](references/multi-timeframe-mode.md) |
 
 **禁止**：均线/MACD/KDJ/RSI、消息面、情绪舆论；虚构笔/线段/中枢/买卖点/价位。
 
@@ -195,6 +202,7 @@ JSON 键名固定为 `chanlun_v2`（历史命名，表示**可执行策略状态
 
 - [references/input-envelope.md](references/input-envelope.md)
 - [references/history-envelope.md](references/history-envelope.md)
+- [references/multi-timeframe-mode.md](references/multi-timeframe-mode.md)
 - [references/structure-priority.md](references/structure-priority.md)
 
 `references/output-schema.md` 为旧版 scenarios 形态，**本任务不使用**。

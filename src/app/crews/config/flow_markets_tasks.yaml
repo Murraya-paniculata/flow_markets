@@ -41,11 +41,26 @@ task_fm_technical:
   description: |
     用户诉求：{{user_query}}，标的：{{symbol}}，补充：{{notes}}。
 
-    执行步骤：
-    1. 调用 get_chan_structure：symbol={{symbol}}（「未指定」也调用并在 brief 说明），timeframe=1h，lookback=300。
+    分析模式：{{analysis_mode}}（single=单周期 | multi_timeframe=多级别联立 4h/1h/15m）
+
+    --- 预注入多级别 JSON（multi_timeframe 模式由服务端写入；single 模式可忽略）---
+    {{multi_timeframe_context}}
+
+    === 单周期模式（analysis_mode=single）===
+    1. 调用 get_chan_structure：symbol={{symbol}}（「未指定」也调用并在 brief 说明），timeframe={{primary_timeframe}}，lookback={{lookback}}。
        未拿到工具返回前不要写最终 JSON。
     2. 只分析工具返回的 data（ok=false 则只填 brief 待数据项，chanlun_v2=null）。禁止编造笔/中枢/价位；
        禁止用均线、MACD、消息、情绪做依据。
+
+    === 多级别联立（analysis_mode=multi_timeframe）===
+    1. 以上「预注入多级别 JSON」已含 4h/1h/15m 结构与 combined_judgment；须三级别联立分析，禁止只看单一级别。
+    2. 仍须调用 get_chan_structure：symbol={{symbol}}，timeframe=1h，lookback={{lookback}}——
+       仅用于 history（胜率/相似案例/learning_feedback/state_machine_hints）；结构事实以预注入 JSON 为准。
+    3. chanlun_v2.meta.interval 固定 1h（中级别）；analysis_markdown 须含多级别段落：
+       大级别定方向 → 中级别买卖点 → 小级别入场；写明 combined_judgment.resonance 与级别是否一致。
+    4. 概率与状态机须反映级别分歧：resonance=mixed 时宜保守（WAIT_CONFIRMATION / OBSERVE_ONLY）。
+
+    === 通用（两种模式）===
     3. 一次输出 TechnicalAnalysisDeliverable（仅 brief、chanlun_v2 两个顶层键）：
 
     【结构优先——分配走势概率与状态机前强制执行】

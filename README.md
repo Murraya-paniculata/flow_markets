@@ -146,23 +146,62 @@ uv run python scripts/demo_chan_chart.py
 CHAN_USE_BEIJING=1 CHAN_INTERVAL=1d uv run python scripts/demo_chan_chart.py
 ```
 
-**缠论 AI 分析 CLI**（用法对齐 chanlun 的 `chanlun_ai.py`；终端输出「结构快览 + 交易者可读 AI 报告」）：
+**缠论 AI 分析 CLI**（对齐 chanlun 两套用法：单周期 `chanlun_ai.py` / 多级别 `multi_level_analyzer.py`）
+
+在项目根目录执行；推荐 `uv run`，或先 `source .venv/bin/activate`。需配置 **APP_LLM_API_KEY**（`--no-ai` 除外）。
+
+#### 单周期（默认 `analysis_mode=single`）
+
+脚本：`scripts/flow_markets_ai.py`。指定 **一个** K 线周期（如 `1h`、`4h`），Agent 通过 `get_chan_structure` 拉结构 + `history`（历史胜率/相似案例），再调 LLM。
 
 ```bash
-# 与 chanlun 同类命令（--table 为习惯参数，输出 chanlun 风格块）
-FM_CHAN_PROGRESS=1 uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200
+# 结构快览 + AI 分析报告（--table 为 chanlun 习惯参数）
+FM_CHAN_PROGRESS=1 uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 300
 
 # 或项目根入口
-uv run python flow_markets_ai.py BTCUSDT 1h --table --limit 200
+uv run python flow_markets_ai.py BTCUSDT 1h --table --limit 300
 
 # 仅结构、不调 LLM
-uv run python scripts/flow_markets_ai.py BTCUSDT 1h --no-ai --limit 200
+uv run python scripts/flow_markets_ai.py BTCUSDT 1h --no-ai --limit 300
 
 # 保存 output/{symbol}_{interval}_{时间}_structure.json / _analysis.json / _report.txt
-uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200 --save
+uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 300 --save
 ```
 
-需 `.env` 中配置 **APP_LLM_API_KEY**（`--table` 全分析时）。等价细粒度脚本：`scripts/run_technical_analyst.py`、`scripts/run_get_chan_structure.py`。
+| 参数 | 说明 |
+|------|------|
+| `symbol` | 交易对，如 `BTCUSDT` |
+| `interval` | 单周期，如 `1h`、`4h`、`15m` |
+| `--limit` | K 线回溯根数（默认 300） |
+| `--table` | 交易者可读终端输出 |
+| `--no-ai` | 只算结构，跳过 LLM |
+| `--save` | 写入 `output/` 并可选落分析记忆库 |
+| `--user-query` | 自定义研究问题 |
+
+#### 多级别联立（`analysis_mode=multi_timeframe`）
+
+脚本：`scripts/multi_timeframe_analyze.py`。固定 **4h / 1h / 15m** 三级别：服务端先算多级别 JSON 并 **注入 Task**，再调技术分析师；`get_chan_structure@1h` 仅用于 `history`（胜率/降级 hints）。
+
+```bash
+# 多级别 4h/1h/15m：先算三级别 → JSON 注入 Task → 再调 AI
+uv run python scripts/multi_timeframe_analyze.py BTCUSDT --save --limit 300
+
+# 只看多级别结构与共振摘要，不调 LLM
+uv run python scripts/multi_timeframe_analyze.py BTCUSDT --no-ai --limit 300
+
+# 终端额外打印完整 multi_timeframe JSON
+uv run python scripts/multi_timeframe_analyze.py BTCUSDT --no-ai --json
+```
+
+| 参数 | 说明 |
+|------|------|
+| `symbol` | 交易对（必填） |
+| `--limit` | 每个级别的 K 线回溯根数（默认 300） |
+| `--no-ai` | 只算 4h/1h/15m 结构与 `combined_judgment`，不调 LLM |
+| `--save` | 保存 `output/multi_timeframe_{symbol}_{时间}.json`；调 AI 时另存 `_analysis.json` / `_report.txt` |
+| `--user-query` | 自定义多级别联立分析问题 |
+
+等价细粒度脚本：`scripts/run_technical_analyst.py`、`scripts/run_get_chan_structure.py`。
 
 ## 测试
 

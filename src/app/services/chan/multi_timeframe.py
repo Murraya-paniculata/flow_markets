@@ -270,6 +270,51 @@ def build_multi_timeframe_snapshot(
     symbol: str,
     *,
     levels: dict[str, dict[str, Any]] | None = None,
+    lookback: int | None = None,
 ) -> MultiTimeframeSnapshot:
     """便捷入口：构建多周期结构快照。"""
-    return MultiTimeframeService(symbol, levels=levels).build_snapshot()
+    cfg = levels
+    if cfg is None and lookback is not None:
+        cfg = {
+            key: {**val, "lookback": lookback}
+            for key, val in DEFAULT_MULTI_TF_LEVELS.items()
+        }
+    return MultiTimeframeService(symbol, levels=cfg).build_snapshot()
+
+
+def format_multi_timeframe_for_prompt(snapshot: MultiTimeframeSnapshot) -> str:
+    """将多级别快照格式化为注入 Task 的 JSON 文本（对齐 chanlun build_multi_level_prompt 粒度）。
+
+    - 三级均含 summary；中级别额外含完整 snapshot（作操作主周期）
+    - 含 combined_judgment（含 prompt_text）
+    """
+    import json
+
+    levels_out: dict[str, Any] = {}
+    for key, lv in snapshot.levels.items():
+        entry: dict[str, Any] = {
+            "ok": lv.ok,
+            "level_key": lv.level_key,
+            "name": lv.name,
+            "timeframe": lv.timeframe,
+            "lookback": lv.lookback,
+            "summary": lv.summary,
+            "error": lv.error,
+        }
+        if lv.ok and lv.snapshot is not None:
+            if key == "medium":
+                entry["snapshot"] = lv.snapshot.model_dump(mode="json")
+        levels_out[key] = entry
+
+    payload = {
+        "meta": snapshot.meta,
+        "partial": snapshot.partial,
+        "combined_judgment": snapshot.combined_judgment.model_dump(mode="json"),
+        "levels": levels_out,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+_SINGLE_MODE_CONTEXT = (
+    "（单周期模式：无预注入多级别 JSON；结构事实以 get_chan_structure 返回的 data 为准。）"
+)

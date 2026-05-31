@@ -28,6 +28,11 @@ from app.schemas.flow_markets_deliverables import (
 from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
+from app.services.chan.multi_timeframe import (
+    _SINGLE_MODE_CONTEXT,
+    build_multi_timeframe_snapshot,
+    format_multi_timeframe_for_prompt,
+)
 from app.services.chan.structure import build_chan_structure_snapshot
 
 logger = get_logger(__name__)
@@ -266,19 +271,61 @@ def _apply_history_enforcement(
     return enforced
 
 
-def _standalone_technical_task(
-    flow: FlowMarketsCrew,
+_ANALYSIS_MODE_SINGLE = "single"
+_ANALYSIS_MODE_MULTI = "multi_timeframe"
+_PRIMARY_TF_MULTI = "1h"
+
+
+def _build_technical_crew_inputs(
     *,
-    timeframe: str = "1h",
-    lookback: int = 300,
-) -> Task:
-    """技术分析师单跑：与 task_fm_technical 同源，无上游 context，可改周期/回溯。"""
+    user_query: str,
+    symbol: str | None,
+    notes: str | None,
+    timeframe: str,
+    lookback: int,
+    analysis_mode: str,
+    multi_timeframe_context: str | None = None,
+) -> dict[str, Any]:
+    mode = analysis_mode if analysis_mode in (_ANALYSIS_MODE_SINGLE, _ANALYSIS_MODE_MULTI) else _ANALYSIS_MODE_SINGLE
+    primary_tf = _PRIMARY_TF_MULTI if mode == _ANALYSIS_MODE_MULTI else timeframe
+    mtf_ctx = multi_timeframe_context if multi_timeframe_context is not None else _SINGLE_MODE_CONTEXT
+    return {
+        "user_query": user_query.strip(),
+        "symbol": (symbol or "").strip() or "（未指定）",
+        "notes": (notes or "").strip() or "无",
+        "analysis_mode": mode,
+        "multi_timeframe_context": mtf_ctx,
+        "primary_timeframe": primary_tf,
+        "lookback": str(lookback),
+    }
+
+
+def _resolve_multi_timeframe_context(
+    symbol: str | None,
+    *,
+    lookback: int,
+    prebuilt: str | None = None,
+) -> tuple[str, str]:
+    """返回 (context_json, error_message)。"""
+    if prebuilt is not None:
+        return prebuilt, ""
+    sym = (symbol or "").strip()
+    if not sym or sym == "（未指定）":
+        return "", "多级别模式需要有效 symbol"
+    try:
+        snap = build_multi_timeframe_snapshot(sym, lookback=lookback)
+    except Exception as exc:
+        return "", f"多级别结构计算失败: {exc}"
+    ok_count = sum(1 for lv in snap.levels.values() if lv.ok)
+    if ok_count == 0:
+        return "", "多级别结构：所有周期均失败"
+    return format_multi_timeframe_for_prompt(snap), ""
+
+
+def _standalone_technical_task(flow: FlowMarketsCrew) -> Task:
+    """技术分析师单跑：与 task_fm_technical 同源，无上游 context，可改周期/回溯/分析模式。"""
     cfg = dict(flow.tasks_config["task_fm_technical"])  # type: ignore[index]
     cfg["context"] = []
-    desc = str(cfg.get("description", ""))
-    desc = desc.replace("timeframe=1h", f"timeframe={timeframe}")
-    desc = desc.replace("lookback=300", f"lookback={lookback}")
-    cfg["description"] = desc
     return Task(config=cfg, output_pydantic=TechnicalAnalysisDeliverable)
 
 
@@ -290,9 +337,15 @@ def run_technical_analyst_only(
     timeframe: str = "1h",
     lookback: int = 300,
     save: bool | None = None,
+    analysis_mode: str = _ANALYSIS_MODE_SINGLE,
+    multi_timeframe_context: str | None = None,
 ) -> tuple[TechnicalAnalysisDeliverable | dict[str, Any] | None, str]:
     """
     仅运行技术分析师（Tool + Skill → TechnicalAnalysisDeliverable）。
+
+    analysis_mode:
+    - ``single``（默认）：单周期，结构来自 get_chan_structure
+    - ``multi_timeframe``：服务端预注入 4h/1h/15m JSON，AI 联立分析；history 仍走 1h 工具
 
     Returns:
         (双交付 JSON：brief + chanlun_v2；失败时可能为 dict/raw, error_message)
@@ -301,24 +354,37 @@ def run_technical_analyst_only(
     if not (settings.llm_api_key or "").strip():
         return None, "未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型"
 
+    mode = analysis_mode if analysis_mode in (_ANALYSIS_MODE_SINGLE, _ANALYSIS_MODE_MULTI) else _ANALYSIS_MODE_SINGLE
+    persist_tf = _PRIMARY_TF_MULTI if mode == _ANALYSIS_MODE_MULTI else timeframe
+    mtf_ctx = multi_timeframe_context
+    if mode == _ANALYSIS_MODE_MULTI and mtf_ctx is None:
+        mtf_ctx, mtf_err = _resolve_multi_timeframe_context(symbol, lookback=lookback)
+        if mtf_err:
+            return None, mtf_err
+
     os.environ["CREWAI_TESTING"] = "true"
-    inputs: dict[str, Any] = {
-        "user_query": user_query.strip(),
-        "symbol": (symbol or "").strip() or "（未指定）",
-        "notes": (notes or "").strip() or "单独运行 technical_analyst",
-    }
+    inputs = _build_technical_crew_inputs(
+        user_query=user_query,
+        symbol=symbol,
+        notes=notes,
+        timeframe=timeframe,
+        lookback=lookback,
+        analysis_mode=mode,
+        multi_timeframe_context=mtf_ctx,
+    )
 
     flow = FlowMarketsCrew()
     agent = flow.technical_analyst()
-    task = _standalone_technical_task(flow, timeframe=timeframe, lookback=lookback)
+    task = _standalone_technical_task(flow)
     crew_obj = Crew(agents=[agent], tasks=[task], verbose=True)
 
     t0 = time.perf_counter()
     logger.info(
         "technical_analyst_only_start",
         symbol=inputs["symbol"],
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
+        analysis_mode=mode,
     )
     try:
         result = crew_obj.kickoff(inputs=inputs)
@@ -334,13 +400,13 @@ def run_technical_analyst_only(
     deliverable = _extract_technical_deliverable(result)
     deliverable = _apply_history_enforcement(
         deliverable,
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
         symbol_hint=symbol,
     )
     _maybe_persist_technical_deliverable(
         deliverable,
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
         symbol_hint=symbol,
         save=save,
@@ -360,6 +426,8 @@ def run_flow_markets_analysis(
     timeframe: str = "1h",
     lookback: int = 300,
     save: bool | None = None,
+    analysis_mode: str = _ANALYSIS_MODE_SINGLE,
+    multi_timeframe_context: str | None = None,
 ) -> tuple[str | None, str]:
     """
     执行 FlowMarkets 编排（当前等同 technical_analyst 单链）。
@@ -371,24 +439,37 @@ def run_flow_markets_analysis(
     if not (settings.llm_api_key or "").strip():
         return None, "未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型"
 
+    mode = analysis_mode if analysis_mode in (_ANALYSIS_MODE_SINGLE, _ANALYSIS_MODE_MULTI) else _ANALYSIS_MODE_SINGLE
+    persist_tf = _PRIMARY_TF_MULTI if mode == _ANALYSIS_MODE_MULTI else timeframe
+    mtf_ctx = multi_timeframe_context
+    if mode == _ANALYSIS_MODE_MULTI and mtf_ctx is None:
+        mtf_ctx, mtf_err = _resolve_multi_timeframe_context(symbol, lookback=lookback)
+        if mtf_err:
+            return None, mtf_err
+
     os.environ["CREWAI_TESTING"] = "true"
-    inputs: dict[str, Any] = {
-        "user_query": user_query.strip(),
-        "symbol": (symbol or "").strip() or "（未指定）",
-        "notes": (notes or "").strip() or "无",
-    }
+    inputs = _build_technical_crew_inputs(
+        user_query=user_query,
+        symbol=symbol,
+        notes=notes,
+        timeframe=timeframe,
+        lookback=lookback,
+        analysis_mode=mode,
+        multi_timeframe_context=mtf_ctx,
+    )
 
     flow = FlowMarketsCrew()
     agent = flow.technical_analyst()
-    task = _standalone_technical_task(flow, timeframe=timeframe, lookback=lookback)
+    task = _standalone_technical_task(flow)
     crew_obj = Crew(agents=[agent], tasks=[task], verbose=True)
     t0 = time.perf_counter()
     logger.info(
         "flow_markets_start",
         user_query_preview=user_query[:120],
         mode="technical_only",
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
+        analysis_mode=mode,
     )
     try:
         result = crew_obj.kickoff(inputs=inputs)
@@ -406,13 +487,13 @@ def run_flow_markets_analysis(
     deliverable = _extract_technical_deliverable(result)
     deliverable = _apply_history_enforcement(
         deliverable,
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
         symbol_hint=symbol,
     )
     _maybe_persist_technical_deliverable(
         deliverable,
-        timeframe=timeframe,
+        timeframe=persist_tf,
         lookback=lookback,
         symbol_hint=symbol,
         save=save,

@@ -19,6 +19,7 @@ from app.services.chan.multi_timeframe import (
     MultiTimeframeService,
     build_multi_timeframe_snapshot,
     combine_multi_timeframe_judgment,
+    format_multi_timeframe_for_prompt,
 )
 
 
@@ -189,3 +190,52 @@ def test_multi_timeframe_service_partial_failure(monkeypatch: pytest.MonkeyPatch
     assert snap.levels["small"].error is not None
     assert snap.levels["large"].ok is True
     assert snap.combined_judgment.main_trend == "up"
+
+
+def test_format_multi_timeframe_for_prompt_medium_has_snapshot() -> None:
+    snap = MultiTimeframeService("BTCUSDT", levels=DEFAULT_MULTI_TF_LEVELS)
+    with __import__("unittest.mock", fromlist=["patch"]).patch(
+        "app.services.chan.multi_timeframe.build_chan_structure_snapshot",
+        side_effect=lambda sym, tf, lookback=300, **kw: _fake_snapshot(
+            "up_trend", "above_zs", tf
+        ),
+    ):
+        built = snap.build_snapshot()
+    text = format_multi_timeframe_for_prompt(built)
+    import json
+
+    payload = json.loads(text)
+    assert payload["combined_judgment"]["main_trend"] == "up"
+    assert "snapshot" in payload["levels"]["medium"]
+    assert "snapshot" not in payload["levels"]["large"]
+    assert "snapshot" not in payload["levels"]["small"]
+
+
+def test_build_technical_crew_inputs_single_and_multi() -> None:
+    from app.crews.flows.flow_markets import _build_technical_crew_inputs
+
+    single = _build_technical_crew_inputs(
+        user_query="q",
+        symbol="BTCUSDT",
+        notes="n",
+        timeframe="4h",
+        lookback=200,
+        analysis_mode="single",
+    )
+    assert single["analysis_mode"] == "single"
+    assert single["primary_timeframe"] == "4h"
+    assert single["lookback"] == "200"
+    assert "单周期" in single["multi_timeframe_context"]
+
+    multi = _build_technical_crew_inputs(
+        user_query="q",
+        symbol="BTCUSDT",
+        notes="n",
+        timeframe="4h",
+        lookback=300,
+        analysis_mode="multi_timeframe",
+        multi_timeframe_context='{"levels":{}}',
+    )
+    assert multi["analysis_mode"] == "multi_timeframe"
+    assert multi["primary_timeframe"] == "1h"
+    assert multi["multi_timeframe_context"].startswith("{")

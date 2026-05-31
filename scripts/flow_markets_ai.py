@@ -3,8 +3,11 @@
 
 项目根目录示例::
 
-  # 与 chanlun 类似：表格/交易者可读输出 + AI 分析
+  # 单周期 AI 分析（默认，对齐 chanlun 单 interval）
   FM_CHAN_PROGRESS=1 uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 200
+
+  # 多级别联立（4h/1h/15m JSON 注入 AI）→ scripts/multi_timeframe_analyze.py
+  uv run python scripts/multi_timeframe_analyze.py BTCUSDT --save --limit 300
 
   # 仅结构快览（不调 LLM）
   uv run python scripts/flow_markets_ai.py BTCUSDT 1h --no-ai --limit 200

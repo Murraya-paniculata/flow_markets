@@ -6,6 +6,7 @@ from .multi_timeframe import (
     MultiTimeframeService,
     build_multi_timeframe_snapshot,
     combine_multi_timeframe_judgment,
+    format_multi_timeframe_for_prompt,
 )
 from .structure import build_chan_structure_snapshot
 
@@ -14,6 +15,7 @@ __all__ = [
     "build_chan_structure_snapshot",
     "build_multi_timeframe_snapshot",
     "combine_multi_timeframe_judgment",
+    "format_multi_timeframe_for_prompt",
     "DEFAULT_MULTI_TF_LEVELS",
     "MultiTimeframeService",
 ]
