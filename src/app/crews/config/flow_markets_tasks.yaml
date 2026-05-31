@@ -72,6 +72,11 @@ task_fm_technical:
     - invalidation：invalidate_active_if≥1 条；next_state
     - standby_strategies 可选；与 analysis_markdown 主推方向不得矛盾
 
+    【history 硬约束】工具返回 history.state_machine_hints.recommended_floor 非空时：
+    - recommended_floor=OBSERVE_ONLY → current_state 必须 OBSERVE_ONLY
+    - recommended_floor=WAIT_CONFIRMATION → 不得 STRATEGY_ACTIVE
+    - 服务端会在输出后强制降级并在 risk_notes 说明；Prompt 须先遵守，避免与最终交付冲突
+
   expected_output: |
     单一 JSON：TechnicalAnalysisDeliverable（brief + chanlun_v2 或 null）。
     禁止输出 Markdown 包裹、禁止前言、禁止编造 K 线/笔/中枢/点位。

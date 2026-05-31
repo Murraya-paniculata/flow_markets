@@ -60,6 +60,8 @@
 
 样本不足（&lt;5）时不设 `recommended_floor`。
 
+**Phase 2.7**：`recommended_floor` 非空时，服务端在 AI 输出后强制降级 `chanlun_v2.state_machine.current_state`，并在 `risk_notes` 追加 `[历史约束]` 条目。
+
 ## `learning_feedback`（Phase 2.6）
 
 | 字段 | 说明 |

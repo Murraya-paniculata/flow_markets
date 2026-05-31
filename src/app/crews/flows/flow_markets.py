@@ -16,6 +16,8 @@ from crewai.project import CrewBase, agent, crew, task, tool
 from crewai.tools import BaseTool
 
 from app.analysis_store import save_technical_deliverable, should_persist_analysis
+from app.analysis_store.history_builder import build_history_block
+from app.analysis_store.history_enforcement import enforce_deliverable
 from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
 from app.crews.llm import get_llm
@@ -26,6 +28,7 @@ from app.schemas.flow_markets_deliverables import (
 from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
+from app.services.chan.structure import build_chan_structure_snapshot
 
 logger = get_logger(__name__)
 
@@ -204,6 +207,65 @@ def _maybe_persist_technical_deliverable(
     )
 
 
+def _resolve_history_hints(
+    deliverable: TechnicalAnalysisDeliverable,
+    *,
+    timeframe: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> dict[str, Any]:
+    if deliverable.chanlun_v2 is None:
+        return {}
+    symbol = (
+        deliverable.chanlun_v2.meta.symbol
+        or deliverable.brief.symbol
+        or symbol_hint
+        or ""
+    ).strip()
+    interval = (
+        deliverable.chanlun_v2.meta.interval
+        or deliverable.brief.interval
+        or timeframe
+    ).strip()
+    if not symbol:
+        return {}
+    try:
+        snapshot = build_chan_structure_snapshot(symbol, interval, lookback=lookback)
+        history = build_history_block(snapshot)
+        return history.get("state_machine_hints") or {}
+    except Exception as exc:
+        logger.warning("resolve_history_hints_failed", error=str(exc))
+        return {}
+
+
+def _apply_history_enforcement(
+    deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
+    *,
+    timeframe: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> TechnicalAnalysisDeliverable | dict[str, Any] | None:
+    if not isinstance(deliverable, TechnicalAnalysisDeliverable):
+        return deliverable
+    if deliverable.chanlun_v2 is None:
+        return deliverable
+    hints = _resolve_history_hints(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+    enforced, result = enforce_deliverable(deliverable, hints)
+    if result.get("applied"):
+        logger.info(
+            "history_enforcement_applied",
+            original_state=result.get("original_state"),
+            new_state=result.get("new_state"),
+            recommended_floor=result.get("recommended_floor"),
+        )
+    return enforced
+
+
 def _standalone_technical_task(
     flow: FlowMarketsCrew,
     *,
@@ -270,6 +332,12 @@ def run_technical_analyst_only(
         )
 
     deliverable = _extract_technical_deliverable(result)
+    deliverable = _apply_history_enforcement(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol,
+    )
     _maybe_persist_technical_deliverable(
         deliverable,
         timeframe=timeframe,
@@ -336,6 +404,12 @@ def run_flow_markets_analysis(
         logger.info("flow_markets_done", elapsed_seconds=round(elapsed, 3))
 
     deliverable = _extract_technical_deliverable(result)
+    deliverable = _apply_history_enforcement(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol,
+    )
     _maybe_persist_technical_deliverable(
         deliverable,
         timeframe=timeframe,

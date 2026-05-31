@@ -10,6 +10,7 @@ from app.analysis_store.db_manager import (
     safe_json_loads,
 )
 from app.analysis_store.history_builder import build_history_block
+from app.analysis_store.history_enforcement import enforce_deliverable, enforce_chanlun_v2
 from app.analysis_store.learning_feedback import analyze_learning_feedback, build_learning_feedback_block
 from app.analysis_store.similar_cases import build_similar_cases_block, search_similar_cases
 from app.analysis_store.outcome import (
@@ -44,6 +45,7 @@ __all__ = [
     "evaluate_pending_snapshots",
     "extract_scenario_for_eval",
     "build_history_block",
+    "enforce_deliverable",
     "build_similar_cases_block",
     "build_learning_feedback_block",
     "analyze_learning_feedback",

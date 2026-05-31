@@ -51,6 +51,8 @@ description: >
 
 若存在 `recommended_floor` 且与结构推断冲突，采用 **更保守** 状态，并在 `risk_notes` 说明。
 
+**Phase 2.7（服务端兜底）**：即使模型输出更激进状态，系统在交付前也会按 `recommended_floor` 强制降级，并在 `risk_notes` 追加 `[历史约束]` 说明。Prompt 仍须先遵守，减少与最终交付不一致。
+
 - **禁止**：在「技术形态概述」用历史编造当前 ZG/ZD；在 **第六节风险** 可写 1 条历史胜率提示。
 - `similar_cases`（Phase 2.5）：结构相似的历史案例胜率与 `prompt_text`；与 `system_stats` 一并参考，取更保守状态。
 - `learning_feedback`（Phase 2.6）：AI 整体历史表现、错误模式与 `prompt_text`（自我认知）；样本 ≥5 时注入。
