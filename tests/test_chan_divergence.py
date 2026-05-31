@@ -74,7 +74,7 @@ def test_engine_attaches_bcs_and_exports_to_signal():
     assert sig.divergences
     for t in sig.divergences:
         assert t in ("bi", "xd", "pz", "qs", "zsd")
-    with patch("app.services.chan.structure.get_klines_beijing", return_value=raw):
+    with patch("app.services.chan.structure.get_klines", return_value=raw):
         with patch("app.services.chan.structure._run_chan_engine", return_value=icl):
             snap = build_chan_structure_snapshot("BTCUSDT", "1h", lookback=200)
     assert snap.signal.divergences

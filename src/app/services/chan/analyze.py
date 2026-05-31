@@ -17,7 +17,7 @@ from .chart import (
     xd_to_chart_json,
     zs_to_chart_json,
 )
-from .kline import cap_limit, get_klines_beijing, normalize_interval
+from .kline import cap_limit, get_klines, normalize_interval, resolve_kline_mode
 
 
 def _chart_dt(dt: Any) -> str:
@@ -51,12 +51,15 @@ def build_kline_chart_payload(
     symbol: str,
     interval: str,
     limit: int = 350,
+    *,
+    kline_mode: str | None = None,
 ) -> Dict[str, Any]:
     _apply_chan_engine_root()
 
     interval_norm = normalize_interval(interval)
     effective_limit = cap_limit(interval_norm, limit)
-    raw = get_klines_beijing(symbol, interval_norm, effective_limit)
+    resolved_mode = resolve_kline_mode(kline_mode)
+    raw = get_klines(symbol, interval_norm, effective_limit, mode=resolved_mode)
     if not raw or len(raw) < 3:
         raise ValueError("Insufficient kline data")
 
@@ -89,8 +92,9 @@ def build_kline_chart_payload(
         "meta": {
             "symbol": symbol,
             "interval": interval_norm,
-            "timezone": "Asia/Shanghai",
-            "base_interval": "5m",
+            "timezone": "UTC" if resolved_mode == "utc" else "Asia/Shanghai",
+            "base_interval": "native" if resolved_mode == "utc" else "5m",
+            "kline_mode": resolved_mode,
             "chart_axis": "merged" if merged_len >= 3 else "time",
             "merged_count": merged_len,
             "count": len(frontend_bars),

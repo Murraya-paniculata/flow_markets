@@ -86,7 +86,7 @@ def test_snapshot_schema_from_synthetic_klines():
     icl = ChanEngineICL("BTC/USDT", "1h", {}).process_klines(df)
 
     with patch(
-        "app.services.chan.structure.get_klines_beijing",
+        "app.services.chan.structure.get_klines",
         return_value=raw,
     ):
         with patch(
@@ -126,7 +126,7 @@ def test_meta_trim_when_lists_cropped():
     total_seg = len(icl.get_xds())
     max_bi, max_seg = 5, 1
 
-    with patch("app.services.chan.structure.get_klines_beijing", return_value=raw):
+    with patch("app.services.chan.structure.get_klines", return_value=raw):
         with patch("app.services.chan.structure._run_chan_engine", return_value=icl):
             snap = build_chan_structure_snapshot(
                 "BTCUSDT",
@@ -164,7 +164,7 @@ def test_tool_returns_ok_envelope():
     icl = ChanEngineICL("ETH/USDT", "4h", {}).process_klines(df)
 
     with patch(
-        "app.services.chan.structure.get_klines_beijing",
+        "app.services.chan.structure.get_klines",
         return_value=raw,
     ):
         with patch(
@@ -184,7 +184,7 @@ def test_tool_returns_ok_envelope():
 
 def test_tool_insufficient_data():
     with patch(
-        "app.services.chan.structure.get_klines_beijing",
+        "app.services.chan.structure.get_klines",
         return_value=[{"open_time": datetime.now(), "open": 1, "high": 2, "low": 0.5, "close": 1.5}],
     ):
         out = GetChanStructureTool()._run(symbol="BTCUSDT", timeframe="1h", lookback=50)

@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import requests
+
+from app.core.config import get_settings
+
+KlineMode = Literal["utc", "beijing"]
+KLINE_MODES: tuple[KlineMode, ...] = ("utc", "beijing")
 
 _BASE_URL = "https://api.binance.com"
 _KLINES_PATH = "/api/v3/klines"
@@ -198,6 +203,30 @@ def fetch_klines_paginated(symbol: str, interval: str, total_bars: int) -> List[
         if len(chunk) < batch_limit:
             break
     return collected[-total_bars:] if len(collected) > total_bars else collected
+
+
+def resolve_kline_mode(mode: str | None = None) -> KlineMode:
+    """解析 K 线对齐模式（默认 utc，与 Binance 交易所一致）。"""
+    raw = (mode or get_settings().kline_mode or "utc").strip().lower()
+    if raw not in KLINE_MODES:
+        raise ValueError(f"不支持的 kline_mode: {raw}，可选: {', '.join(KLINE_MODES)}")
+    return raw  # type: ignore[return-value]
+
+
+def get_klines(
+    symbol: str,
+    interval: str,
+    limit: int = 500,
+    *,
+    mode: str | None = None,
+) -> List[Dict[str, Any]]:
+    """按配置或参数拉取 K 线：utc=Binance 原生；beijing=5m 聚合对齐北京时间。"""
+    resolved = resolve_kline_mode(mode)
+    iv = normalize_interval(interval)
+    capped = cap_limit(iv, limit)
+    if resolved == "beijing":
+        return get_klines_beijing(symbol, iv, capped)
+    return fetch_klines_paginated(symbol, iv, capped)
 
 
 def get_klines_beijing(symbol: str, interval: str, limit: int = 500) -> List[Dict[str, Any]]:

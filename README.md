@@ -127,11 +127,20 @@ deploy/               # docker、k8s、grafana
 | `analyze.py` | API 入口 `build_kline_chart_payload` |
 | `backend.py` | 结构引擎计算与结构转换               |
 | `chart.py`   | 结构 → 前端 JSON                     |
-| `kline.py`   | Binance + 北京时间聚合               |
+| `kline.py`   | Binance K 线；`APP_KLINE_MODE=utc\|beijing` |
 
 可选 **`APP_CHAN_ENGINE_ROOT`** 覆盖内置计算库路径（旧环境变量名仍可读入，见 `config.py`）。
 
-**API**：`GET /api/v1/chan/kline/{symbol}/{interval}?limit=350`（需 `X-API-Key`）
+**K 线模式**（`.env` 中 `APP_KLINE_MODE`）：
+
+| 值 | 说明 |
+|----|------|
+| `utc`（**默认**） | Binance 原生周期，与交易所 K 线一致 |
+| `beijing` | 5m 分页拉取后按北京时间桶聚合（与旧版 / chanlun 验图习惯一致） |
+
+与旧环境变量兼容：验图脚本仍可读 `CHAN_USE_BEIJING=1`（等价于 `beijing`）。
+
+**API**：`GET /api/v1/chan/kline/{symbol}/{interval}?limit=350&kline_mode=utc`（需 `X-API-Key`）
 
 返回字段与 chanlun 图表对齐：`klines`、`merged_klines`、`bi`、`xd`、`zs`、`fx`、`bsp`，`meta.engine` 为 **`structure-engine`**。
 
@@ -142,8 +151,9 @@ uv sync --extra chart
 uv run python scripts/demo_chan_chart.py
 # 图片: output/chan_charts/btcusdt_1d_chan.png
 
-# 与 API 相同 K 线（北京时间 5m 聚合）:
-CHAN_USE_BEIJING=1 CHAN_INTERVAL=1d uv run python scripts/demo_chan_chart.py
+# 默认 APP_KLINE_MODE=utc；北京时间聚合验图:
+APP_KLINE_MODE=beijing uv run python scripts/demo_chan_chart.py
+# 或旧变量: CHAN_USE_BEIJING=1 uv run python scripts/demo_chan_chart.py
 ```
 
 **缠论 AI 分析 CLI**（对齐 chanlun 两套用法：单周期 `chanlun_ai.py` / 多级别 `multi_level_analyzer.py`）

@@ -24,9 +24,9 @@ from app.services.chan.backend import (  # noqa: E402
     interval_to_kl_type,
 )
 from app.services.chan.kline import (  # noqa: E402
-    fetch_klines_raw,
-    get_klines_beijing,
+    get_klines,
     normalize_interval,
+    resolve_kline_mode,
 )
 
 import pandas as pd  # noqa: E402
@@ -34,19 +34,19 @@ import pandas as pd  # noqa: E402
 SYMBOL = os.environ.get("CHAN_SYMBOL", "BTCUSDT").upper()
 INTERVAL = os.environ.get("CHAN_INTERVAL", "1d")
 LIMIT = int(os.environ.get("CHAN_LIMIT", "500"))
-USE_BEIJING = os.environ.get("CHAN_USE_BEIJING", "0").strip() in ("1", "true", "yes")
+_RAW_MODE = os.environ.get("APP_KLINE_MODE", os.environ.get("CHAN_USE_BEIJING", "0"))
+if _RAW_MODE.strip().lower() in ("1", "true", "yes", "beijing"):
+    KLINE_MODE = "beijing"
+elif _RAW_MODE.strip().lower() in ("utc", "beijing"):
+    KLINE_MODE = _RAW_MODE.strip().lower()
+else:
+    KLINE_MODE = "utc"
 OUTPUT_DIR = Path(os.environ.get("CHAN_OUTPUT_DIR", _ROOT / "output" / "chan_charts"))
 OUTPUT_IMG = OUTPUT_DIR / f"{SYMBOL.lower()}_{INTERVAL}_chan.png"
-_DIRECT = frozenset({"5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"})
 
 
 def _load_df() -> pd.DataFrame:
-    if USE_BEIJING:
-        raw = get_klines_beijing(SYMBOL, normalize_interval(INTERVAL), LIMIT)
-    else:
-        if INTERVAL not in _DIRECT:
-            raise ValueError(f"不支持 {INTERVAL}，或设 CHAN_USE_BEIJING=1")
-        raw = fetch_klines_raw(SYMBOL, INTERVAL, min(LIMIT, 1000))
+    raw = get_klines(SYMBOL, normalize_interval(INTERVAL), LIMIT, mode=KLINE_MODE)
     rows = [
         {"date": k["open_time"], "open": k["open"], "high": k["high"], "low": k["low"], "close": k["close"]}
         for k in raw
@@ -61,12 +61,12 @@ def main() -> None:
     from Plot.PlotDriver import CPlotDriver  # noqa: WPS433
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    mode = "5m聚合" if USE_BEIJING else "Binance直连"
-    print(f"拉取 {SYMBOL} {INTERVAL} x{LIMIT}（{mode}）…")
+    mode_label = "5m聚合(北京)" if resolve_kline_mode(KLINE_MODE) == "beijing" else "Binance UTC"
+    print(f"拉取 {SYMBOL} {INTERVAL} x{LIMIT}（{mode_label}）…")
     df = _load_df()
     print(f"共 {len(df)} 根")
 
-    freq = normalize_interval(INTERVAL) if USE_BEIJING else INTERVAL
+    freq = normalize_interval(INTERVAL)
     klu_list = dataframe_to_ckline_units(df)
     chan = build_cchan(klu_list, interval_to_kl_type(freq), SYMBOL, {"print_warning": True})
     print(f"笔 {len(chan[0].bi_list)}，线段 {len(chan[0].seg_list)}")

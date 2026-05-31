@@ -17,6 +17,11 @@ def test_settings_analysis_db_default() -> None:
     assert s.analysis_db_url == "sqlite:///./data/analysis.db"
 
 
+def test_settings_kline_mode_default() -> None:
+    s = Settings(_env_file=None)
+    assert s.kline_mode == "utc"
+
+
 def test_get_valid_api_keys_empty() -> None:
     s = Settings(api_keys="")
     assert s.get_valid_api_keys() == set()

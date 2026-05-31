@@ -55,7 +55,7 @@ def test_snapshot_exports_macd_strength():
         for r in df.to_dict("records")
     ]
     icl = ChanEngineICL("BTC/USDT", "1h", {}).process_klines(df)
-    with patch("app.services.chan.structure.get_klines_beijing", return_value=raw):
+    with patch("app.services.chan.structure.get_klines", return_value=raw):
         with patch("app.services.chan.structure._run_chan_engine", return_value=icl):
             snap = build_chan_structure_snapshot("BTCUSDT", "1h", lookback=120)
     exported = [b for b in snap.bi if b.macd_strength is not None and b.macd_strength > 0]

@@ -149,7 +149,7 @@ def _snapshot_dict(
     ]
     df = pd.DataFrame(engine)
     icl = ChanEngineICL("BTC/USDT", "1h", {}).process_klines(df)
-    with patch("app.services.chan.structure.get_klines_beijing", return_value=raw):
+    with patch("app.services.chan.structure.get_klines", return_value=raw):
         with patch("app.services.chan.structure._run_chan_engine", return_value=icl):
             snap = build_chan_structure_snapshot(
                 "BTCUSDT",

@@ -19,7 +19,7 @@ from app.schemas.chan_structure import (
 )
 from app.services.chan.analyze import _apply_chan_engine_root, _run_chan_engine
 from app.services.chan.backend import ENGINE_ID, ChanEngineICL
-from app.services.chan.kline import cap_limit, get_klines_beijing, normalize_interval
+from app.services.chan.kline import cap_limit, get_klines, normalize_interval
 from app.services.chan.types import SimpleBi, SimpleMMD, SimpleXD, SimpleZS
 
 DEFAULT_LOOKBACK = 300
@@ -270,7 +270,7 @@ def build_chan_structure_snapshot(
     interval = normalize_interval(timeframe)
     limit = cap_limit(interval, lookback)
 
-    raw = get_klines_beijing(binance_symbol, interval, limit)
+    raw = get_klines(binance_symbol, interval, limit)
     if not raw or len(raw) < MIN_KLINES:
         raise ValueError(
             f"K 线不足：需要至少 {MIN_KLINES} 根，当前 {len(raw)} 根。"

@@ -2,7 +2,7 @@
 
 import os
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Literal, Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     analysis_db_url: str = "sqlite:///./data/analysis.db"
     # technical 成功后是否默认写入分析库（CLI --save / API save=true 可单独开启）
     analysis_save: bool = False
+
+    # K 线对齐：utc=Binance 原生周期（默认）；beijing=北京时间 5m 聚合
+    kline_mode: Literal["utc", "beijing"] = "utc"
 
     @model_validator(mode="before")
     @classmethod
