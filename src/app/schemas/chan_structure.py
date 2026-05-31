@@ -155,5 +155,41 @@ class ChanToolFailure(BaseModel):
     hint: str = ""
 
 
+class MultiTimeframeLevelResult(BaseModel):
+    """单周期结构结果（MultiTimeframeService 内）。"""
+
+    ok: bool
+    level_key: str
+    name: str
+    timeframe: str
+    lookback: int
+    snapshot: ChanStructureSnapshot | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class MultiTimeframeCombinedJudgment(BaseModel):
+    """三级别共振与综合建议。"""
+
+    main_trend: str = "unknown"
+    trend_strength: str = "weak"
+    resonance: str = "unknown"
+    trend_alignment: dict[str, str] = Field(default_factory=dict)
+    position_alignment: dict[str, str] = Field(default_factory=dict)
+    buy_signals: list[str] = Field(default_factory=list)
+    sell_signals: list[str] = Field(default_factory=list)
+    suggestion: str = ""
+    prompt_text: str = ""
+
+
+class MultiTimeframeSnapshot(BaseModel):
+    """多周期缠论结构快照（默认 4h / 1h / 15m）。"""
+
+    meta: dict[str, Any]
+    levels: dict[str, MultiTimeframeLevelResult]
+    combined_judgment: MultiTimeframeCombinedJudgment
+    partial: bool = False
+
+
 def snapshot_to_dict(snapshot: ChanStructureSnapshot) -> dict[str, Any]:
     return snapshot.model_dump(mode="json")
