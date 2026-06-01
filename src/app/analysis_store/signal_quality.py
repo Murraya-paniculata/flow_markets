@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from app.analysis_store.db_manager import get_db_conn, get_db_path, safe_json_loads
+from app.analysis_store.db_manager import get_db_path
+from app.analysis_store.signal_classifier import (
+    classify_signal,
+    extract_direction_from_ai,
+)
 from app.schemas.flow_markets_deliverables import SignalQualitySummary, TechnicalAnalysisDeliverable
 
 DEFAULT_WEIGHTS: dict[str, float] = {
@@ -71,120 +74,14 @@ def _load_history_stats() -> dict[str, dict]:
     if _HISTORY_STATS_CACHE:
         return _HISTORY_STATS_CACHE
 
-    signal_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "wins": 0})
-    trend_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "wins": 0})
-    position_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "wins": 0})
-    direction_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "wins": 0})
-    combo_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "wins": 0})
-
     try:
-        with get_db_conn() as conn:
-            rows = conn.execute(
-                """
-                SELECT ai_json, outcome_json, chanlun_json
-                FROM analysis_snapshot
-                WHERE evaluated = 1 AND outcome_json IS NOT NULL
-                """
-            ).fetchall()
+        from app.analysis_store.stats_service import StatsService
 
-        for ai_str, outcome_str, chanlun_str in rows:
-            try:
-                ai = safe_json_loads(ai_str, {})
-                outcome = safe_json_loads(outcome_str, {})
-                chanlun = safe_json_loads(chanlun_str, {})
-
-                hit_target = bool(outcome.get("hit_target", False))
-                source = chanlun if chanlun else ai
-                signal = source.get("signal", {})
-                summary = source.get("structure_summary", {})
-
-                buy_sell_points = signal.get("buy_sell_points", [])
-                divergences = signal.get("divergences", [])
-                trend = summary.get("trend", "unknown")
-                position = summary.get("price_position", "unknown")
-                direction = _extract_direction_from_ai(ai, outcome)
-                signal_type = classify_signal(buy_sell_points, divergences)
-
-                signal_stats[signal_type]["total"] += 1
-                if hit_target:
-                    signal_stats[signal_type]["wins"] += 1
-
-                trend_stats[trend]["total"] += 1
-                if hit_target:
-                    trend_stats[trend]["wins"] += 1
-
-                position_stats[position]["total"] += 1
-                if hit_target:
-                    position_stats[position]["wins"] += 1
-
-                direction_stats[direction]["total"] += 1
-                if hit_target:
-                    direction_stats[direction]["wins"] += 1
-
-                combo_key = f"{signal_type}_{direction}"
-                combo_stats[combo_key]["total"] += 1
-                if hit_target:
-                    combo_stats[combo_key]["wins"] += 1
-            except Exception:
-                continue
-
-        _HISTORY_STATS_CACHE = {
-            "signal": dict(signal_stats),
-            "trend": dict(trend_stats),
-            "position": dict(position_stats),
-            "direction": dict(direction_stats),
-            "combo": dict(combo_stats),
-        }
+        _HISTORY_STATS_CACHE = StatsService().history_buckets_for_scoring()
     except Exception:
         _HISTORY_STATS_CACHE = {}
 
     return _HISTORY_STATS_CACHE
-
-
-def classify_signal(buy_sell_points: list[Any], divergences: list[Any]) -> str:
-    if not buy_sell_points and not divergences:
-        return "none"
-
-    for signal in buy_sell_points:
-        signal_lower = str(signal).lower()
-        if "1buy" in signal_lower:
-            return "1buy"
-        if "2buy" in signal_lower:
-            return "2buy"
-        if "3buy" in signal_lower:
-            return "3buy"
-        if "1sell" in signal_lower:
-            return "1sell"
-        if "2sell" in signal_lower:
-            return "2sell"
-        if "3sell" in signal_lower:
-            return "3sell"
-
-    for bc in divergences:
-        bc_lower = str(bc).lower()
-        if "bottom" in bc_lower or "底" in bc_lower:
-            return "bc_buy"
-        if "top" in bc_lower or "顶" in bc_lower:
-            return "bc_sell"
-
-    return "mixed"
-
-
-def _extract_direction_from_ai(ai: dict[str, Any], outcome: dict[str, Any] | None = None) -> str:
-    primary = ai.get("primary_scenario") or {}
-    direction = primary.get("direction")
-    if direction:
-        return str(direction)
-
-    v2 = ai.get("chanlun_v2") or {}
-    active = (v2.get("state_machine") or {}).get("active_strategy") or {}
-    direction = active.get("direction")
-    if direction:
-        return str(direction)
-
-    if outcome:
-        return str(outcome.get("direction", "unknown"))
-    return "unknown"
 
 
 def _target_stop_pct_from_ai(ai: dict[str, Any]) -> tuple[float, float]:
@@ -428,7 +325,7 @@ def calculate_signal_quality(
     position = summary.get("price_position", "unknown")
     strength = summary.get("strength_comparison", "unknown")
 
-    direction = _extract_direction_from_ai(ai_json)
+    direction = extract_direction_from_ai(ai_json)
     target_pct, stop_pct = _target_stop_pct_from_ai(ai_json)
     signal_type = classify_signal(buy_sell_points, divergences)
     has_divergence = bool(divergences)

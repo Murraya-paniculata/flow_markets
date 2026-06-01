@@ -25,10 +25,19 @@ from app.analysis_store.persist import (
 )
 
 from app.analysis_store.stats_formatter import (
+    format_enhanced_report,
     format_stats_for_prompt,
     get_stats_summary,
 )
-from app.analysis_store.stats_service import calculate_accuracy, count_evaluated_samples
+from app.analysis_store.stats_service import (
+    BucketStat,
+    EvaluatedRecord,
+    StatsService,
+    calculate_accuracy,
+    count_evaluated_samples,
+    extract_structure_context_from_record,
+    is_scorable_outcome,
+)
 from app.analysis_store.signal_quality import (
     apply_signal_quality_to_deliverable,
     calculate_signal_quality,
@@ -55,9 +64,15 @@ __all__ = [
     "build_learning_feedback_block",
     "analyze_learning_feedback",
     "search_similar_cases",
+    "StatsService",
+    "BucketStat",
+    "EvaluatedRecord",
     "calculate_accuracy",
     "count_evaluated_samples",
+    "extract_structure_context_from_record",
+    "is_scorable_outcome",
     "format_stats_for_prompt",
+    "format_enhanced_report",
     "get_stats_summary",
     "apply_signal_quality_to_deliverable",
     "calculate_signal_quality",

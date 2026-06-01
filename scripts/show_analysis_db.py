@@ -22,7 +22,7 @@ if str(_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_ROOT / "src"))
 
 from app.analysis_store import get_db_conn, get_db_path, init_db, safe_json_loads
-from app.analysis_store.stats_service import _is_scorable_outcome
+from app.analysis_store.stats_service import is_scorable_outcome
 
 CSV_COLUMNS = [
     "id",
@@ -106,7 +106,7 @@ def _scorable_label(outcome: dict[str, Any] | None, evaluated: int) -> str:
         return "否(待评估)"
     if not outcome:
         return "否"
-    return "是" if _is_scorable_outcome(outcome) else "否"
+    return "是" if is_scorable_outcome(outcome) else "否"
 
 
 def _extract_ai_summary(ai: dict[str, Any] | None) -> dict[str, str]:
@@ -414,7 +414,7 @@ def main() -> int:
         for (raw,) in conn.execute(
             "SELECT outcome_json FROM analysis_snapshot WHERE evaluated = 1"
         ).fetchall():
-            if _is_scorable_outcome(safe_json_loads(raw)):
+            if is_scorable_outcome(safe_json_loads(raw)):
                 scorable += 1
 
     print(f"快照总数: {total}  |  已评估: {evaluated}  |  可计分: {scorable}")
