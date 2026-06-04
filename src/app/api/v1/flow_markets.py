@@ -17,6 +17,7 @@ from app.services.analyze_streaming import (
     get_analysis_stream_result,
 )
 from app.services.structure_only import run_structure_only
+from app.services.analysis_output import write_structure_only_artifacts
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -83,6 +84,19 @@ async def analyze(
                 request_id=request_id,
             )
 
+        output_files: list[str] = []
+        if body.save:
+            try:
+                output_files = await asyncio.to_thread(
+                    write_structure_only_artifacts,
+                    symbol=body.symbol or "",
+                    structure_payload=struct_result.structure_payload,
+                    multi_tf=body.multi_tf,
+                    interval=body.timeframe,
+                )
+            except Exception as exc:
+                logger.warning("structure_only_save_artifacts_failed", error=str(exc))
+
         return ApiResponse(
             code=0,
             message="ok",
@@ -92,12 +106,13 @@ async def analyze(
                 report_content=struct_result.report_content,
                 structure_only=True,
                 structure_payload=struct_result.structure_payload,
+                output_files=output_files,
             ),
             request_id=request_id,
         )
 
     try:
-        report, err = await asyncio.to_thread(
+        report, err, output_files = await asyncio.to_thread(
             run_flow_markets_analysis,
             user_query=body.user_query,
             symbol=body.symbol,
@@ -130,6 +145,7 @@ async def analyze(
             success=True,
             message="分析完成",
             report_content=report,
+            output_files=output_files,
         ),
         request_id=request_id,
     )

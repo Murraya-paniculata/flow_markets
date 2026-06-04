@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from app.cli.common import clamp_lookback, display_symbol, normalize_symbol
+from app.services.analysis_output import write_structure_only_artifacts
 from app.services.structure_only import run_structure_only
 
 
@@ -40,18 +40,18 @@ def run_structure(args: argparse.Namespace, *, root: Path) -> int:
         print(json.dumps(result.structure_payload, ensure_ascii=False, indent=2))
 
     if args.save:
-        out_dir = root / "output"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if args.multi_tf:
-            path = out_dir / f"multi_timeframe_{symbol}_{ts}.json"
-        else:
-            path = out_dir / f"{symbol}_{interval}_{ts}_structure.json"
-        path.write_text(
-            json.dumps(result.structure_payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        print(f"💾 结构 JSON: {path.resolve()}", file=sys.stderr)
+        try:
+            paths = write_structure_only_artifacts(
+                symbol=symbol,
+                structure_payload=result.structure_payload,
+                multi_tf=args.multi_tf,
+                interval=interval,
+                project_root=root,
+            )
+            for rel in paths:
+                print(f"💾 {rel}", file=sys.stderr)
+        except Exception as exc:
+            print(f"   ✗ 保存失败: {exc}", file=sys.stderr)
 
     print("")
     return 0

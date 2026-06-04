@@ -29,6 +29,10 @@ from app.schemas.flow_markets_deliverables import (
 from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
+from app.services.analysis_output import (
+    should_write_output_artifacts,
+    write_analyze_save_artifacts,
+)
 from app.services.chan.multi_timeframe import (
     _SINGLE_MODE_CONTEXT,
     build_multi_timeframe_snapshot,
@@ -472,16 +476,17 @@ def run_flow_markets_analysis(
     save: bool | None = None,
     analysis_mode: str = _ANALYSIS_MODE_SINGLE,
     multi_timeframe_context: str | None = None,
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str, list[str]]:
     """
     执行 FlowMarkets 编排（当前等同 technical_analyst 单链）。
 
     Returns:
-        (report_markdown, error_message)；成功时 error_message 为空字符串。
+        (report_markdown, error_message, output_files)；成功时 error_message 为空。
+        ``save=true`` 时 ``output_files`` 为写入的相对路径列表。
     """
     settings = get_settings()
     if not (settings.llm_api_key or "").strip():
-        return None, "未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型"
+        return None, "未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型", []
 
     mode = analysis_mode if analysis_mode in (_ANALYSIS_MODE_SINGLE, _ANALYSIS_MODE_MULTI) else _ANALYSIS_MODE_SINGLE
     persist_tf = _PRIMARY_TF_MULTI if mode == _ANALYSIS_MODE_MULTI else timeframe
@@ -489,7 +494,7 @@ def run_flow_markets_analysis(
     if mode == _ANALYSIS_MODE_MULTI and mtf_ctx is None:
         mtf_ctx, mtf_err = _resolve_multi_timeframe_context(symbol, lookback=lookback)
         if mtf_err:
-            return None, mtf_err
+            return None, mtf_err, []
 
     os.environ["CREWAI_TESTING"] = "true"
     inputs = _build_technical_crew_inputs(
@@ -519,7 +524,7 @@ def run_flow_markets_analysis(
         result = crew_obj.kickoff(inputs=inputs)
     except Exception as e:
         logger.exception("flow_markets_failed", error=str(e))
-        return None, f"FlowMarkets 执行失败: {e}"
+        return None, f"FlowMarkets 执行失败: {e}", []
     finally:
         elapsed = time.perf_counter() - t0
         try:
@@ -549,6 +554,25 @@ def run_flow_markets_analysis(
         save=save,
     )
 
+    output_files: list[str] = []
+    if (
+        should_write_output_artifacts(save=save)
+        and isinstance(deliverable, TechnicalAnalysisDeliverable)
+        and symbol
+        and (symbol or "").strip()
+    ):
+        sym = (symbol or "").strip()
+        try:
+            output_files = write_analyze_save_artifacts(
+                symbol=sym,
+                timeframe=persist_tf if mode == _ANALYSIS_MODE_SINGLE else "1h",
+                lookback=lookback,
+                deliverable=deliverable,
+                multi_tf=mode == _ANALYSIS_MODE_MULTI,
+            )
+        except Exception as exc:
+            logger.warning("write_analyze_save_artifacts_failed", error=str(exc))
+
     report = assemble_flow_markets_report(
         result,
         user_query=inputs["user_query"],
@@ -558,7 +582,7 @@ def run_flow_markets_analysis(
         report = _get_report_from_crew_result(result)
     if not report:
         report = "(未从 Crew 输出解析到报告正文，请检查各任务输出或日志)"
-    return report, ""
+    return report, "", output_files
 
 
 def analyze_flow_markets(
@@ -586,7 +610,7 @@ def analyze_flow_markets(
         (report_markdown, error_message)；成功时 error_message 为空。
     """
     persist = save if save is not None else save_report
-    report, err = run_flow_markets_analysis(
+    report, err, _output_files = run_flow_markets_analysis(
         user_query=user_query,
         symbol=symbol,
         notes=notes,

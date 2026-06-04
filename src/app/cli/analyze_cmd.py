@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from app.cli.common import clamp_lookback, display_symbol, normalize_symbol
@@ -52,31 +51,9 @@ def _print_deliverable(
         print(render_task_deliverable(result))
 
 
-def _save_deliverable(
-    *,
-    root: Path,
-    file_stem: str,
-    result,
-    use_trader_display: bool,
-) -> None:
-    from app.schemas.flow_markets_deliverables import TechnicalAnalysisDeliverable
-
-    if not isinstance(result, TechnicalAnalysisDeliverable):
-        return
-    out_dir = root / "output"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    deliverable_path = out_dir / f"{file_stem}_analysis.json"
-    deliverable_path.write_text(
-        json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"💾 分析 JSON: {deliverable_path.resolve()}", file=sys.stderr)
-    if use_trader_display:
-        from app.schemas.technical_analysis_display import format_trader_display
-
-        txt_path = out_dir / f"{file_stem}_report.txt"
-        txt_path.write_text(format_trader_display(result), encoding="utf-8")
-        print(f"💾 终端文案: {txt_path.resolve()}", file=sys.stderr)
+def _print_saved_paths(paths: list[str]) -> None:
+    for rel in paths:
+        print(f"💾 {rel}", file=sys.stderr)
 
 
 def run_analyze(args: argparse.Namespace, *, root: Path) -> int:
@@ -139,19 +116,6 @@ def _run_single_analyze(
     print(f"   ✓ K 线 {ds.kline} 根；笔 {ds.bi} / 段 {ds.segment}")
     print(format_structure_cli_summary(snapshot))
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_stem = f"{symbol}_{interval}_{ts}"
-
-    if save:
-        out_dir = root / "output"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        struct_path = out_dir / f"{file_stem}_structure.json"
-        struct_path.write_text(
-            json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        print(f"💾 结构 JSON: {struct_path.resolve()}", file=sys.stderr)
-
     print("\n🤖 步骤 2/3: 调用技术分析师（get_chan_structure + Skill）...")
     from app.core.config import get_settings
     from app.crews.flows.flow_markets import run_technical_analyst_only
@@ -194,12 +158,20 @@ def _run_single_analyze(
     _print_deliverable(result, use_trader_display=use_trader_display)
 
     if save:
-        _save_deliverable(
-            root=root,
-            file_stem=file_stem,
-            result=result,
-            use_trader_display=use_trader_display,
-        )
+        from app.services.analysis_output import write_analyze_save_artifacts
+
+        try:
+            paths = write_analyze_save_artifacts(
+                symbol=symbol,
+                timeframe=interval,
+                lookback=lookback,
+                deliverable=result,
+                multi_tf=False,
+                project_root=root,
+            )
+            _print_saved_paths(paths)
+        except Exception as exc:
+            print(f"   ✗ 保存 output/ 失败: {exc}", file=sys.stderr)
 
     if as_json:
         print("\n=== TechnicalAnalysisDeliverable JSON ===\n")
@@ -247,17 +219,6 @@ def _run_multi_analyze(
     print("=" * 60)
     print(cj.prompt_text)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_stem = f"multi_timeframe_{symbol}_{ts}"
-    mtf_json = format_multi_timeframe_for_prompt(snapshot)
-
-    if save:
-        out_dir = root / "output"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        mtf_path = out_dir / f"{file_stem}.json"
-        mtf_path.write_text(mtf_json, encoding="utf-8")
-        print(f"\n💾 多级别 JSON: {mtf_path.resolve()}", file=sys.stderr)
-
     if ok == 0:
         print("✗ 无有效级别，无法调用 AI", file=sys.stderr)
         return 1
@@ -273,6 +234,7 @@ def _run_multi_analyze(
         return 1
 
     query = user_query or _default_user_query_multi(disp)
+    mtf_json = format_multi_timeframe_for_prompt(snapshot)
     result, err = run_technical_analyst_only(
         query,
         symbol,
@@ -295,12 +257,20 @@ def _run_multi_analyze(
     _print_deliverable(result, use_trader_display=True)
 
     if save:
-        _save_deliverable(
-            root=root,
-            file_stem=file_stem,
-            result=result,
-            use_trader_display=True,
-        )
+        from app.services.analysis_output import write_analyze_save_artifacts
+
+        try:
+            paths = write_analyze_save_artifacts(
+                symbol=symbol,
+                timeframe="1h",
+                lookback=lookback,
+                deliverable=result,
+                multi_tf=True,
+                project_root=root,
+            )
+            _print_saved_paths(paths)
+        except Exception as exc:
+            print(f"   ✗ 保存 output/ 失败: {exc}", file=sys.stderr)
 
     if as_json:
         print("\n=== TechnicalAnalysisDeliverable JSON ===\n")

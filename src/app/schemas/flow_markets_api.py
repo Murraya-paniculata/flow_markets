@@ -54,7 +54,11 @@ class FlowMarketsAnalyzeRequest(BaseModel):
     )
     save: bool | None = Field(
         None,
-        description="为 true 时强制写入分析记忆库；为 false 时强制不写；省略时遵循 APP_ANALYSIS_SAVE。no_ai 时忽略落库。",
+        description=(
+            "为 true 时写入 output/ 并强制写入分析记忆库（full 分析）；"
+            "no_ai 时仅写 output/ 结构 JSON，不落库。"
+            "省略时仅遵循 APP_ANALYSIS_SAVE 落库，不写 output/。"
+        ),
     )
 
     @field_validator("timeframe")
@@ -88,4 +92,8 @@ class FlowMarketsAnalyzeResponse(BaseModel):
     structure_payload: dict[str, Any] | None = Field(
         None,
         description="缠论结构 JSON（单周期 snapshot 或多级别 snapshot）",
+    )
+    output_files: list[str] = Field(
+        default_factory=list,
+        description="save=true 时写入的 output/ 相对路径列表",
     )

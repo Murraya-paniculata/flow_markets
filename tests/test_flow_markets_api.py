@@ -59,7 +59,7 @@ async def test_analyze_endpoint_passes_timeframe_lookback_multi_tf() -> None:
 
     def fake_run(**kwargs):
         captured.update(kwargs)
-        return "# report", ""
+        return "# report", "", []
 
     with patch(
         "app.api.v1.flow_markets.run_flow_markets_analysis",
@@ -98,7 +98,7 @@ async def test_analyze_endpoint_single_mode_by_default() -> None:
 
     def fake_run(**kwargs):
         captured.update(kwargs)
-        return "# ok", ""
+        return "# ok", "", []
 
     with patch(
         "app.api.v1.flow_markets.run_flow_markets_analysis",
@@ -176,3 +176,27 @@ async def test_analyze_endpoint_no_ai_calls_structure_only() -> None:
     assert payload["structure_only"] is True
     assert payload["structure_payload"] == fake_payload
     assert payload["report_content"] == "# 结构快览"
+
+
+@pytest.mark.asyncio
+async def test_analyze_endpoint_passes_output_files_from_flow() -> None:
+    with patch(
+        "app.api.v1.flow_markets.run_flow_markets_analysis",
+        return_value=("# report", "", ["output/BTC_1h_x_analysis.json"]),
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            r = await client.post(
+                "/api/v1/flow-markets/analyze",
+                json={
+                    "user_query": "分析",
+                    "symbol": "BTCUSDT",
+                    "save": True,
+                },
+                headers={"X-API-Key": "dev-no-key"},
+            )
+
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["output_files"] == ["output/BTC_1h_x_analysis.json"]

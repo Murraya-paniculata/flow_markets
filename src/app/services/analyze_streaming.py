@@ -31,6 +31,11 @@ from app.schemas.flow_markets_deliverables import (
     assemble_flow_markets_report,
 )
 from app.schemas.technical_analysis_display import format_structure_cli_summary
+from app.services.analysis_output import (
+    should_write_output_artifacts,
+    write_analyze_save_artifacts,
+    write_structure_only_artifacts,
+)
 from app.services.chan.kline import cap_limit, get_klines
 from app.services.chan.multi_timeframe import (
     build_multi_timeframe_snapshot,
@@ -108,6 +113,7 @@ def _build_final_result(
     deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
     structure_only: bool = False,
     structure_payload: dict[str, Any] | None = None,
+    output_files: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "success": success,
@@ -116,6 +122,7 @@ def _build_final_result(
         "deliverable": _deliverable_payload(deliverable),
         "structure_only": structure_only,
         "structure_payload": structure_payload,
+        "output_files": output_files or [],
     }
 
 
@@ -358,6 +365,18 @@ async def analyze_flow_markets_streaming(
 
         yield _emit_log("info", "   ℹ 已跳过 AI 与治理（no_ai=true）", step=2, phase="structure")
         await asyncio.sleep(0)
+        output_files: list[str] = []
+        if should_write_output_artifacts(save=save) and sym:
+            try:
+                output_files = await asyncio.to_thread(
+                    write_structure_only_artifacts,
+                    symbol=sym,
+                    structure_payload=struct.structure_payload,
+                    multi_tf=mode == _ANALYSIS_MODE_MULTI,
+                    interval=timeframe,
+                )
+            except Exception as exc:
+                logger.warning("stream_structure_save_artifacts_failed", error=str(exc))
         result = _build_final_result(
             success=True,
             message="结构分析完成",
@@ -365,6 +384,7 @@ async def analyze_flow_markets_streaming(
             deliverable=None,
             structure_only=True,
             structure_payload=struct.structure_payload,
+            output_files=output_files,
         )
         _stream_result_store[task_id] = result
         yield _emit_log("success", f"✅ 结构分析完成（task_id={task_id}）", step=2, phase="structure")
@@ -498,11 +518,30 @@ async def analyze_flow_markets_streaming(
     if not report:
         report = "(未从 Crew 输出解析到报告正文，请检查各任务输出或日志)"
 
+    output_files: list[str] = []
+    if (
+        should_write_output_artifacts(save=save)
+        and isinstance(deliverable, TechnicalAnalysisDeliverable)
+        and sym
+    ):
+        try:
+            output_files = await asyncio.to_thread(
+                write_analyze_save_artifacts,
+                symbol=sym,
+                timeframe=persist_tf if mode == _ANALYSIS_MODE_SINGLE else "1h",
+                lookback=lookback,
+                deliverable=deliverable,
+                multi_tf=mode == _ANALYSIS_MODE_MULTI,
+            )
+        except Exception as exc:
+            logger.warning("stream_analyze_save_artifacts_failed", error=str(exc))
+
     result = _build_final_result(
         success=True,
         message="分析完成",
         report_content=report,
         deliverable=deliverable,
+        output_files=output_files,
     )
     _stream_result_store[task_id] = result
     yield _emit_log("success", f"✅ 分析完成（task_id={task_id}）", step=4, phase="governance")

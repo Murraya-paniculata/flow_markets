@@ -61,7 +61,7 @@ PYTHONPATH=src python -m app
 - 指标: `GET /metrics`
 - 示例接口: `GET /api/v1/demo/ping`（需请求头 `X-API-Key`，开发环境可不配置 APP_API_KEYS）
 - **Demo 深度调研**: `POST /api/v1/demo/deep-research`，请求体须为 JSON：必填 `topic`（非空字符串，1–500 字），可选 `extra_instructions`（字符串或 null）。需请求头 `Content-Type: application/json`、`X-API-Key`。返回 422 时查看响应 `detail` 定位校验错误。需配置 LLM + 百度搜索 API Key。
-- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`，JSON 必填 `user_query`，可选 `symbol`、`notes`；YAML+CrewBase 顺序链，各 Task 通过 `output_pydantic` 由 CrewAI 约束结构化输出（通义千问等模型）。
+- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`（同步）、`POST /api/v1/flow-markets/analyze/stream`（SSE）。JSON 必填 `user_query`，可选 `symbol`、`timeframe`、`lookback`、`multi_tf`、`no_ai`、`save`。`save=true` 时同时写 `output/` 与分析记忆库（full）；`save` 省略时仅当 `APP_ANALYSIS_SAVE=true` 落库、不写盘；`save=false` 两者都不写。响应字段 `output_files` 为写入的相对路径。
 
 ## 项目结构
 
@@ -185,7 +185,7 @@ uv run python scripts/flow_markets_ai.py BTCUSDT 1h --table --limit 300 --save
 | `--limit` | K 线回溯根数（默认 300） |
 | `--table` | 交易者可读终端输出 |
 | `--no-ai` | 只算结构，跳过 LLM |
-| `--save` | 写入 `output/` 并可选落分析记忆库 |
+| `--save` | 显式 `true`：写 `output/`；full 分析且环境允许时同时落分析记忆库。省略则仅按 `APP_ANALYSIS_SAVE` 落库、不写盘 |
 | `--user-query` | 自定义研究问题 |
 
 #### 多级别联立（`analysis_mode=multi_timeframe`）
