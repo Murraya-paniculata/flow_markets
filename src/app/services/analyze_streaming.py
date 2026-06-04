@@ -7,8 +7,6 @@ import os
 import time
 from typing import Any, AsyncGenerator
 
-from crewai import Crew
-
 from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
 from app.crews.flows.flow_markets import (
@@ -22,8 +20,9 @@ from app.crews.flows.flow_markets import (
     _extract_technical_deliverable,
     _maybe_persist_technical_deliverable,
     _resolve_multi_timeframe_context,
-    _standalone_technical_task,
+    create_flow_markets_crew_for_run,
 )
+from app.crews.flows.flow_markets_mode import is_flow_markets_full_mode
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
 from app.schemas.flow_markets_deliverables import (
@@ -415,7 +414,10 @@ async def analyze_flow_markets_streaming(
 
     yield _emit_log(
         "step",
-        f"🤖 步骤 3/{TOTAL_STEPS}: 调用技术分析师（CrewAI + get_chan_structure）...",
+        (
+            f"🤖 步骤 3/{TOTAL_STEPS}: 调用 FlowMarkets"
+            f"（{'完整研究链' if is_flow_markets_full_mode() else '技术分析师'}）..."
+        ),
         step=3,
         phase="ai",
     )
@@ -436,16 +438,14 @@ async def analyze_flow_markets_streaming(
     await asyncio.sleep(0)
 
     flow = FlowMarketsCrew()
-    agent = flow.technical_analyst()
-    task = _standalone_technical_task(flow)
-    crew_obj = Crew(agents=[agent], tasks=[task], verbose=True)
+    crew_obj, stream_metrics_name = create_flow_markets_crew_for_run(flow)
 
     t0 = time.perf_counter()
     try:
         crew_result = await asyncio.to_thread(crew_obj.kickoff, inputs=inputs)
     except Exception as exc:
         logger.exception("analyze_streaming_ai_failed", error=str(exc))
-        msg = f"技术分析师执行失败: {exc}"
+        msg = f"FlowMarkets 执行失败: {exc}"
         result = _build_final_result(False, msg, None, None)
         _stream_result_store[task_id] = result
         yield _emit_log("error", f"✗ {msg}", step=3, phase="ai")
@@ -454,11 +454,16 @@ async def analyze_flow_markets_streaming(
     finally:
         elapsed = time.perf_counter() - t0
         try:
-            crew_execution_seconds.labels(flow_name="flow_markets_stream").observe(elapsed)
+            crew_execution_seconds.labels(flow_name=stream_metrics_name).observe(elapsed)
         except Exception:
             logger.warning("analyze_stream_metrics_observe_failed", exc_info=True)
 
-    yield _emit_log("success", "   ✓ AI 分析完成", step=3, phase="ai")
+    yield _emit_log(
+        "success",
+        f"   ✓ {'完整研究链' if is_flow_markets_full_mode() else 'AI 分析'}完成",
+        step=3,
+        phase="ai",
+    )
     await asyncio.sleep(0)
 
     deliverable = _extract_technical_deliverable(crew_result)

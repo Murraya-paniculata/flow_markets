@@ -2,7 +2,7 @@
 
 import os
 from functools import lru_cache
-from typing import Any, Literal, Literal
+from typing import Any, Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # K 线对齐：utc=Binance 原生周期（默认）；beijing=北京时间 5m 聚合
     kline_mode: Literal["utc", "beijing"] = "utc"
 
+    # FlowMarkets Crew：technical_only=仅技术分析师；full=市场→舆情→情绪→技术→综合→交易→组合
+    flow_markets_mode: Literal["technical_only", "full"] = "technical_only"
+
     @model_validator(mode="before")
     @classmethod
     def fallback_api_keys_from_env(cls, data: Any) -> Any:
@@ -83,6 +86,12 @@ class Settings(BaseSettings):
             )
         if not (out.get("baidu_api_key") or "").strip():
             out["baidu_api_key"] = os.environ.get("BAIDU_API_KEY", "").strip()
+        raw_mode = (
+            (out.get("flow_markets_mode") or "").strip().lower()
+            or os.environ.get("FLOW_MARKETS_MODE", "").strip().lower()
+        )
+        if raw_mode in ("technical_only", "full"):
+            out["flow_markets_mode"] = raw_mode
         return out
 
     @field_validator("log_level")

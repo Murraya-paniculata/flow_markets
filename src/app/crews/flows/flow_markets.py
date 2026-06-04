@@ -1,6 +1,6 @@
 """FlowMarkets：交易研究 Crew（YAML Agent/Task + Sequential）。
 
-当前仅启用 technical_analyst + task_fm_technical；其余 Agent/Task 在 YAML 与下方 @agent/@task 中已注释。
+默认 ``APP_FLOW_MARKETS_MODE=technical_only``（仅技术分析师）；``full`` 启用完整研究链。
 """
 
 from __future__ import annotations
@@ -23,8 +23,19 @@ from app.core.config import get_settings
 from app.crews.flows.deep_research import _get_report_from_crew_result
 from app.crews.llm import get_llm
 from app.schemas.flow_markets_deliverables import (
+    MarketStructureBrief,
+    NarrativeBrief,
+    PortfolioBrief,
+    ResearchSynthesis,
+    SentimentAssessment,
     TechnicalAnalysisDeliverable,
+    TradingPlaybook,
     assemble_flow_markets_report,
+)
+from app.crews.flows.flow_markets_mode import (
+    flow_markets_metrics_flow_name,
+    get_flow_markets_mode,
+    is_flow_markets_full_mode,
 )
 from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
 from app.observability.logging import get_logger
@@ -95,18 +106,17 @@ class FlowMarketsCrew:
     def GetChanStructureTool(self) -> BaseTool:
         return GetChanStructureToolImpl()
 
-    # --- 暂停：精进 technical 期间注释以下 Agent ---
-    # @agent
-    # def market_analyst(self) -> Agent:
-    #     return _flow_markets_agent(self, "market_analyst")
-    #
-    # @agent
-    # def narrative_analyst(self) -> Agent:
-    #     return _flow_markets_agent(self, "narrative_analyst")
-    #
-    # @agent
-    # def sentiment_analyst(self) -> Agent:
-    #     return _flow_markets_agent(self, "sentiment_analyst")
+    @agent
+    def market_analyst(self) -> Agent:
+        return _flow_markets_agent(self, "market_analyst")
+
+    @agent
+    def narrative_analyst(self) -> Agent:
+        return _flow_markets_agent(self, "narrative_analyst")
+
+    @agent
+    def sentiment_analyst(self) -> Agent:
+        return _flow_markets_agent(self, "sentiment_analyst")
 
     @agent
     def technical_analyst(self) -> Agent:
@@ -126,49 +136,72 @@ class FlowMarketsCrew:
             kwargs["max_iter"] = int(mi)
         return Agent(**kwargs)
 
-    # @agent
-    # def research_manager(self) -> Agent:
-    #     return _flow_markets_agent(self, "research_manager")
-    #
-    # @agent
-    # def trader(self) -> Agent:
-    #     return _flow_markets_agent(self, "trader")
-    #
-    # @agent
-    # def portfolio_manager(self) -> Agent:
-    #     return _flow_markets_agent(self, "portfolio_manager")
+    @agent
+    def research_manager(self) -> Agent:
+        return _flow_markets_agent(self, "research_manager")
 
-    # @task
-    # def task_fm_market(self) -> Task:
-    #     return _fm_task(self, "task_fm_market", MarketStructureBrief)
-    #
-    # @task
-    # def task_fm_narrative(self) -> Task:
-    #     return _fm_task(self, "task_fm_narrative", NarrativeBrief)
-    #
-    # @task
-    # def task_fm_sentiment(self) -> Task:
-    #     return _fm_task(self, "task_fm_sentiment", SentimentAssessment)
+    @agent
+    def trader(self) -> Agent:
+        return _flow_markets_agent(self, "trader")
+
+    @agent
+    def portfolio_manager(self) -> Agent:
+        return _flow_markets_agent(self, "portfolio_manager")
+
+    @task
+    def task_fm_market(self) -> Task:
+        return _fm_task(self, "task_fm_market", MarketStructureBrief)
+
+    @task
+    def task_fm_narrative(self) -> Task:
+        return _fm_task(self, "task_fm_narrative", NarrativeBrief)
+
+    @task
+    def task_fm_sentiment(self) -> Task:
+        return _fm_task(self, "task_fm_sentiment", SentimentAssessment)
 
     @task
     def task_fm_technical(self) -> Task:
         return _fm_task(self, "task_fm_technical", TechnicalAnalysisDeliverable)
 
-    # @task
-    # def task_fm_synthesis(self) -> Task:
-    #     return _fm_task(self, "task_fm_synthesis", ResearchSynthesis)
-    #
-    # @task
-    # def task_fm_trading(self) -> Task:
-    #     return _fm_task(self, "task_fm_trading", TradingPlaybook)
-    #
-    # @task
-    # def task_fm_portfolio(self) -> Task:
-    #     return _fm_task(self, "task_fm_portfolio", PortfolioBrief)
+    @task
+    def task_fm_synthesis(self) -> Task:
+        return _fm_task(self, "task_fm_synthesis", ResearchSynthesis)
+
+    @task
+    def task_fm_trading(self) -> Task:
+        return _fm_task(self, "task_fm_trading", TradingPlaybook)
+
+    @task
+    def task_fm_portfolio(self) -> Task:
+        return _fm_task(self, "task_fm_portfolio", PortfolioBrief)
 
     @crew
     def crew(self) -> Crew:
-        """当前仅技术分析师单链；恢复全链时取消 YAML / @agent / @task 注释并扩展 agents/tasks 列表。"""
+        """按 ``APP_FLOW_MARKETS_MODE`` 返回完整链或仅技术分析师链。"""
+        if is_flow_markets_full_mode():
+            return Crew(
+                agents=[
+                    self.market_analyst(),
+                    self.narrative_analyst(),
+                    self.sentiment_analyst(),
+                    self.technical_analyst(),
+                    self.research_manager(),
+                    self.trader(),
+                    self.portfolio_manager(),
+                ],
+                tasks=[
+                    self.task_fm_market(),
+                    self.task_fm_narrative(),
+                    self.task_fm_sentiment(),
+                    self.task_fm_technical(),
+                    self.task_fm_synthesis(),
+                    self.task_fm_trading(),
+                    self.task_fm_portfolio(),
+                ],
+                process=Process.sequential,
+                verbose=True,
+            )
         return Crew(
             agents=[self.technical_analyst()],
             tasks=[self.task_fm_technical()],
@@ -371,6 +404,27 @@ def _standalone_technical_task(flow: FlowMarketsCrew) -> Task:
     return Task(config=cfg, output_pydantic=TechnicalAnalysisDeliverable)
 
 
+def create_flow_markets_crew_for_run(
+    flow: FlowMarketsCrew,
+    *,
+    force_technical_only: bool = False,
+) -> tuple[Crew, str]:
+    """
+    构建待 kickoff 的 Crew。
+
+    - 默认 / ``technical_only``：独立 technical Task（与 Phase 5 一致）
+    - ``full``：7 角色 Sequential 全链
+    """
+    if force_technical_only or not is_flow_markets_full_mode():
+        agent = flow.technical_analyst()
+        task = _standalone_technical_task(flow)
+        return (
+            Crew(agents=[agent], tasks=[task], verbose=True),
+            "flow_markets",
+        )
+    return flow.crew(), "flow_markets_full"
+
+
 def run_technical_analyst_only(
     user_query: str,
     symbol: str | None = None,
@@ -416,9 +470,10 @@ def run_technical_analyst_only(
     )
 
     flow = FlowMarketsCrew()
-    agent = flow.technical_analyst()
-    task = _standalone_technical_task(flow)
-    crew_obj = Crew(agents=[agent], tasks=[task], verbose=True)
+    crew_obj, _metrics_name = create_flow_markets_crew_for_run(
+        flow,
+        force_technical_only=True,
+    )
 
     t0 = time.perf_counter()
     logger.info(
@@ -427,6 +482,7 @@ def run_technical_analyst_only(
         timeframe=persist_tf,
         lookback=lookback,
         analysis_mode=mode,
+        flow_markets_mode=get_flow_markets_mode(),
     )
     try:
         result = crew_obj.kickoff(inputs=inputs)
@@ -478,7 +534,10 @@ def run_flow_markets_analysis(
     multi_timeframe_context: str | None = None,
 ) -> tuple[str | None, str, list[str]]:
     """
-    执行 FlowMarkets 编排（当前等同 technical_analyst 单链）。
+    执行 FlowMarkets 编排。
+
+    ``APP_FLOW_MARKETS_MODE=technical_only``（默认）时仅技术分析师；
+    ``full`` 时跑完整研究链，技术交付物仍经治理与可选落库/写盘。
 
     Returns:
         (report_markdown, error_message, output_files)；成功时 error_message 为空。
@@ -508,14 +567,13 @@ def run_flow_markets_analysis(
     )
 
     flow = FlowMarketsCrew()
-    agent = flow.technical_analyst()
-    task = _standalone_technical_task(flow)
-    crew_obj = Crew(agents=[agent], tasks=[task], verbose=True)
+    crew_obj, metrics_name = create_flow_markets_crew_for_run(flow)
     t0 = time.perf_counter()
     logger.info(
         "flow_markets_start",
         user_query_preview=user_query[:120],
-        mode="technical_only",
+        flow_markets_mode=get_flow_markets_mode(),
+        metrics_flow=metrics_name,
         timeframe=persist_tf,
         lookback=lookback,
         analysis_mode=mode,
@@ -528,7 +586,7 @@ def run_flow_markets_analysis(
     finally:
         elapsed = time.perf_counter() - t0
         try:
-            crew_execution_seconds.labels(flow_name="flow_markets").observe(elapsed)
+            crew_execution_seconds.labels(flow_name=metrics_name).observe(elapsed)
         except Exception:
             logger.warning("flow_markets_metrics_observe_failed", exc_info=True)
         logger.info("flow_markets_done", elapsed_seconds=round(elapsed, 3))

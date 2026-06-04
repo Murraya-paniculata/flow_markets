@@ -175,7 +175,9 @@ async def test_streaming_pipeline_phases_with_mocks() -> None:
         ),
         patch("app.services.analyze_streaming._structure_info_lines", return_value=["💰 当前价格：50000"]),
         patch("app.services.analyze_streaming.FlowMarketsCrew") as mock_crew_cls,
-        patch("app.services.analyze_streaming._standalone_technical_task", return_value=MagicMock()),
+        patch(
+            "app.services.analyze_streaming.create_flow_markets_crew_for_run",
+        ) as mock_create_crew,
         patch(
             "app.services.analyze_streaming._apply_history_enforcement",
             side_effect=lambda d, **_: d,
@@ -198,16 +200,16 @@ async def test_streaming_pipeline_phases_with_mocks() -> None:
         mock_crew.technical_analyst.return_value = MagicMock()
         mock_crew_obj = MagicMock()
         mock_crew_obj.kickoff.return_value = crew_result
-        with patch("app.services.analyze_streaming.Crew", return_value=mock_crew_obj):
-            events: list[dict[str, Any]] = []
-            async for ev in streaming_mod.analyze_flow_markets_streaming(
-                user_query="测试",
-                symbol="BTCUSDT",
-                timeframe="1h",
-                lookback=200,
-                task_id=task_id,
-            ):
-                events.append(ev)
+        mock_create_crew.return_value = (mock_crew_obj, "flow_markets")
+        events: list[dict[str, Any]] = []
+        async for ev in streaming_mod.analyze_flow_markets_streaming(
+            user_query="测试",
+            symbol="BTCUSDT",
+            timeframe="1h",
+            lookback=200,
+            task_id=task_id,
+        ):
+            events.append(ev)
 
     phases = [e.get("phase") for e in events if e.get("type") != "result"]
     assert "kline" in phases
