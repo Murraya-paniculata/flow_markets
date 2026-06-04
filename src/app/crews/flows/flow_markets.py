@@ -37,7 +37,9 @@ from app.crews.flows.flow_markets_mode import (
     get_flow_markets_mode,
     is_flow_markets_full_mode,
 )
+from app.crews.tools import BaiduSearchTool as BaiduSearchToolImpl
 from app.crews.tools import GetChanStructureTool as GetChanStructureToolImpl
+from app.crews.tools import GetMarketTickerSummaryTool as GetMarketTickerSummaryToolImpl
 from app.observability.logging import get_logger
 from app.observability.metrics import crew_execution_seconds
 from app.services.analysis_output import (
@@ -71,7 +73,13 @@ def flow_markets_report_path(
     return Path(output_dir) / f"{prefix}_{ts}.md"
 
 
-def _flow_markets_agent(crew_base_instance: Any, key: str) -> Agent:
+def _flow_markets_agent(
+    crew_base_instance: Any,
+    key: str,
+    *,
+    tools: list[BaseTool] | None = None,
+    skills: list[Any] | None = None,
+) -> Agent:
     cfg: dict[str, Any] = crew_base_instance.agents_config[key]  # type: ignore[index]
     kwargs: dict[str, Any] = {
         "config": cfg,
@@ -80,10 +88,13 @@ def _flow_markets_agent(crew_base_instance: Any, key: str) -> Agent:
         "allow_delegation": cfg.get("allow_delegation", False),
         "memory": cfg.get("memory", False),
     }
-    # CrewAI Agent 要求 max_iter 为 int；YAML 未配置时不要传 None
     mi = cfg.get("max_iter")
     if mi is not None:
         kwargs["max_iter"] = int(mi)
+    if tools is not None:
+        kwargs["tools"] = tools
+    if skills is not None:
+        kwargs["skills"] = skills
     return Agent(**kwargs)
 
 
@@ -106,17 +117,43 @@ class FlowMarketsCrew:
     def GetChanStructureTool(self) -> BaseTool:
         return GetChanStructureToolImpl()
 
+    @tool
+    def BaiduSearchTool(self) -> BaseTool:
+        return BaiduSearchToolImpl()
+
+    @tool
+    def GetMarketTickerSummaryTool(self) -> BaseTool:
+        return GetMarketTickerSummaryToolImpl()
+
     @agent
     def market_analyst(self) -> Agent:
-        return _flow_markets_agent(self, "market_analyst")
+        return _flow_markets_agent(
+            self,
+            "market_analyst",
+            tools=[
+                self.GetMarketTickerSummaryTool(),
+                self.BaiduSearchTool(),
+            ],
+        )
 
     @agent
     def narrative_analyst(self) -> Agent:
-        return _flow_markets_agent(self, "narrative_analyst")
+        return _flow_markets_agent(
+            self,
+            "narrative_analyst",
+            tools=[self.BaiduSearchTool()],
+        )
 
     @agent
     def sentiment_analyst(self) -> Agent:
-        return _flow_markets_agent(self, "sentiment_analyst")
+        return _flow_markets_agent(
+            self,
+            "sentiment_analyst",
+            tools=[
+                self.GetMarketTickerSummaryTool(),
+                self.BaiduSearchTool(),
+            ],
+        )
 
     @agent
     def technical_analyst(self) -> Agent:

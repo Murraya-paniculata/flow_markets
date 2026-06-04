@@ -9,7 +9,12 @@ task_fm_market:
     标的提示（可为空）：{{symbol}}
     补充说明：{{notes}}
     交付里程碑：完成《市场结构简报》结构化输出（MarketStructureBrief）。
-    聚焦宏观与流动性结构；无行情工具时不编造价格/成交量，缺数据处明确标注。
+
+    【工具 — 须先调用再写 JSON】
+    1. 若 symbol 非「未指定」：调用 get_market_ticker_summary(symbol=标的)，将返回的 24h 价量/资金费率写入 facts（标注来源 Binance 公开 API）。
+    2. 用 baidu_search 检索宏观/流动性/政策（2–4 次，关键词含标的名 + 美联储/流动性/加密监管等）；检索失败则 facts 标注「待检索」、assumptions 列出缺什么。
+
+    聚焦宏观与流动性结构；禁止编造未出现在工具输出中的具体价格/成交量。
   expected_output: |
     符合 MarketStructureBrief 契约的完整 JSON：含 facts、inferences、assumptions、
     liquidity_and_market_phase、key_drivers（≥3）、disclaimer；字段质量标准见各 Field description。
@@ -21,6 +26,9 @@ task_fm_narrative:
   description: |
     用户诉求：{{user_query}}，标的：{{symbol}}。
     结合上游《市场结构简报》，交付 NarrativeBrief：归纳公开叙事、标注来源可信度与未证实传言。
+
+    【工具】用 baidu_search 检索标的相关叙事（媒体、公告、社区、KOL，2–4 次）。
+    无 API Key 或零结果时：narratives 可仅基于上游简报推断，并必填 pending_search_keywords（3–8 个）与 pending_channels；禁止编造具体报道标题或 URL。
   expected_output: |
     符合 NarrativeBrief 契约的完整 JSON；无检索工具时填写 pending_search_keywords 与 pending_channels。
 
@@ -31,6 +39,12 @@ task_fm_sentiment:
     - task_fm_narrative
   description: |
     基于市场简报与叙事摘要，交付 SentimentAssessment：情绪与行为维度，每条信号须含失效条件。
+
+    【工具】
+    1. 若 symbol 有效：先 get_market_ticker_summary，将 24h 波动、成交量、last_funding_rate 写入 signals（注明数据来源）。
+    2. baidu_search 补充恐慌贪婪/资金费率/拥挤交易等公开讨论（1–3 次）；失败则基于行情工具 + 上游简报，勿编造新闻。
+
+    signals 至少 2 条；禁止喊单式结论。
   expected_output: |
     符合 SentimentAssessment 契约的完整 JSON；signals 至少 2 条，禁止喊单式结论。
 
