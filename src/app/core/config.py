@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # FlowMarkets Crew：technical_only=仅技术分析师；full=市场→舆情→情绪→技术→综合→交易→组合
     flow_markets_mode: Literal["technical_only", "full"] = "technical_only"
 
+    # Phase 7：结构引擎（默认 chanpy / structure-engine；chanlun_icl 仅对比）
+    chan_structure_engine: Literal["structure-engine", "chanlun_icl"] = "structure-engine"
+    chan_zs_algo: Literal["normal", "over_seg", "auto"] = "normal"
+    chanlun_repo_root: str = ""
+
     @model_validator(mode="before")
     @classmethod
     def fallback_api_keys_from_env(cls, data: Any) -> Any:
@@ -92,6 +97,18 @@ class Settings(BaseSettings):
         )
         if raw_mode in ("technical_only", "full"):
             out["flow_markets_mode"] = raw_mode
+        raw_engine = (
+            (out.get("chan_structure_engine") or "").strip().lower()
+            or os.environ.get("CHAN_STRUCTURE_ENGINE", "").strip().lower()
+        )
+        if raw_engine in ("structure-engine", "chanlun_icl"):
+            out["chan_structure_engine"] = raw_engine
+        raw_zs = (
+            (out.get("chan_zs_algo") or "").strip().lower()
+            or os.environ.get("CHAN_ZS_ALGO", "").strip().lower()
+        )
+        if raw_zs in ("normal", "over_seg", "auto"):
+            out["chan_zs_algo"] = raw_zs
         return out
 
     @field_validator("log_level")

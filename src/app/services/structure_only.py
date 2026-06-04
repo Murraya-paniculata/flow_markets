@@ -55,6 +55,8 @@ def run_structure_only(
     timeframe: str = "1h",
     lookback: int = 300,
     multi_tf: bool = False,
+    engine_id: str | None = None,
+    zs_algo: str | None = None,
 ) -> tuple[StructureOnlyResult | None, str]:
     """
     计算缠论结构并返回 Markdown 快览 + JSON payload。
@@ -81,7 +83,13 @@ def run_structure_only(
                 "",
             )
 
-        snap = build_chan_structure_snapshot(sym, timeframe, lookback=lookback)
+        snap = build_chan_structure_snapshot(
+            sym,
+            timeframe,
+            lookback=lookback,
+            engine_id=engine_id,
+            zs_algo=zs_algo,
+        )
         return (
             StructureOnlyResult(
                 report_content=format_structure_cli_summary(snap).strip()

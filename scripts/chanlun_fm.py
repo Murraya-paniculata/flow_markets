@@ -57,6 +57,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="交易者可读输出（默认已开启，与 chanlun --table 同类）",
     )
+    _add_engine_flags(p_analyze)
 
     p_structure = sub.add_parser("structure", help="仅缠论结构（不调 LLM）")
     p_structure.add_argument("symbol", help="交易对")
@@ -70,6 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_structure.add_argument("--multi-tf", action="store_true", help="多级别 4h/1h/15m")
     p_structure.add_argument("--save", action="store_true", help="保存结构 JSON 到 output/")
     p_structure.add_argument("--json", action="store_true", help="终端打印结构 JSON")
+    _add_engine_flags(p_structure)
 
     p_stats = sub.add_parser("stats", help="分析库统计")
     p_stats.add_argument("--snapshots", action="store_true", help="最近分析快照")
@@ -88,6 +90,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def _add_engine_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--engine",
+        choices=("structure-engine", "chanlun_icl"),
+        default=None,
+        help="结构引擎（默认 APP_CHAN_STRUCTURE_ENGINE=structure-engine；chanlun_icl 仅对比）",
+    )
+    parser.add_argument(
+        "--zs-algo",
+        choices=("normal", "over_seg", "auto"),
+        default=None,
+        dest="zs_algo",
+        help="chanpy 中枢算法（仅 structure-engine；默认 APP_CHAN_ZS_ALGO=normal）",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

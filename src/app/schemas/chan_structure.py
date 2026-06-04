@@ -21,6 +21,10 @@ class ChanMeta(BaseModel):
     timestamp: str
     engine: str = "structure-engine"
     engine_version: str = "flow-markets-v1"
+    zs_algo: str | None = Field(
+        default=None,
+        description="仅 structure-engine（chanpy）：normal / over_seg / auto",
+    )
     data_size: ChanDataSize
     trim: dict[str, int] | None = Field(
         default=None,

@@ -35,7 +35,16 @@ EXPORTER_TOP_LEVEL_KEYS = frozenset(
 )
 
 META_KEYS = frozenset(
-    {"symbol", "interval", "timestamp", "engine", "engine_version", "data_size", "trim"}
+    {
+        "symbol",
+        "interval",
+        "timestamp",
+        "engine",
+        "engine_version",
+        "zs_algo",
+        "data_size",
+        "trim",
+    }
 )
 DATA_SIZE_KEYS = frozenset({"kline", "bi", "segment", "center"})
 MARKET_KEYS = frozenset({"latest_price", "trend_hint", "volatility_hint"})

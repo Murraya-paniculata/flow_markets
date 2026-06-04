@@ -84,6 +84,8 @@ def run_analyze(args: argparse.Namespace, *, root: Path) -> int:
         user_query=(args.user_query or "").strip(),
         as_json=args.json,
         use_trader_display=use_trader_display,
+        engine_id=getattr(args, "engine", None),
+        zs_algo=getattr(args, "zs_algo", None),
     )
 
 
@@ -98,6 +100,8 @@ def _run_single_analyze(
     user_query: str,
     as_json: bool,
     use_trader_display: bool,
+    engine_id: str | None = None,
+    zs_algo: str | None = None,
 ) -> int:
     print(f"\n🚀 FlowMarkets 分析 {disp} @ {interval}（{lookback} 根 K 线）")
     print("=" * 60)
@@ -107,7 +111,13 @@ def _run_single_analyze(
         from app.services.chan.structure import build_chan_structure_snapshot
         from app.schemas.technical_analysis_display import format_structure_cli_summary
 
-        snapshot = build_chan_structure_snapshot(symbol, interval, lookback=lookback)
+        snapshot = build_chan_structure_snapshot(
+            symbol,
+            interval,
+            lookback=lookback,
+            engine_id=engine_id,
+            zs_algo=zs_algo,
+        )
     except Exception as exc:
         print(f"   ✗ 结构计算失败: {exc}", file=sys.stderr)
         return 1

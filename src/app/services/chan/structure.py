@@ -19,6 +19,12 @@ from app.schemas.chan_structure import (
 )
 from app.services.chan.analyze import _apply_chan_engine_root, _run_chan_engine
 from app.services.chan.backend import ENGINE_ID, ChanEngineICL
+from app.services.chan.chanlun_icl import build_snapshot_via_chanlun_icl
+from app.services.chan.engine_policy import (
+    ENGINE_CHANLUN_ICL,
+    resolve_structure_engine,
+    resolve_zs_algo,
+)
 from app.services.chan.kline import cap_limit, get_klines, normalize_interval
 from app.services.chan.types import SimpleBi, SimpleMMD, SimpleXD, SimpleZS
 
@@ -257,6 +263,8 @@ def build_chan_structure_snapshot(
     *,
     max_bi: int = DEFAULT_MAX_BI,
     max_segment: int = DEFAULT_MAX_SEGMENT,
+    engine_id: str | None = None,
+    zs_algo: str | None = None,
 ) -> ChanStructureSnapshot:
     """
     拉取 K 线、运行缠论结构引擎、导出缠论结构快照。
@@ -265,6 +273,9 @@ def build_chan_structure_snapshot(
         ValueError: 参数或数据不足
         RuntimeError: 行情/引擎失败
     """
+    resolved_engine = resolve_structure_engine(engine_id)
+    resolved_zs = resolve_zs_algo(zs_algo) if resolved_engine != ENGINE_CHANLUN_ICL else None
+
     _apply_chan_engine_root()
     binance_symbol, display_symbol = _normalize_symbol(symbol)
     interval = normalize_interval(timeframe)
@@ -275,6 +286,15 @@ def build_chan_structure_snapshot(
         raise ValueError(
             f"K 线不足：需要至少 {MIN_KLINES} 根，当前 {len(raw)} 根。"
             f"请增大 lookback 或更换周期。"
+        )
+
+    if resolved_engine == ENGINE_CHANLUN_ICL:
+        return build_snapshot_via_chanlun_icl(
+            display_symbol=display_symbol,
+            interval=interval,
+            raw_klines=raw,
+            max_bi=max_bi,
+            max_segment=max_segment,
         )
 
     engine_klines = [
@@ -288,7 +308,12 @@ def build_chan_structure_snapshot(
         }
         for k in raw
     ]
-    icl = _run_chan_engine(display_symbol, interval, engine_klines)
+    icl = _run_chan_engine(
+        display_symbol,
+        interval,
+        engine_klines,
+        zs_algo=resolved_zs,
+    )
     latest_price = float(raw[-1]["close"])
 
     all_bis = icl.get_bis()
@@ -306,6 +331,8 @@ def build_chan_structure_snapshot(
         symbol=display_symbol,
         interval=interval,
         timestamp=datetime.now(timezone.utc).isoformat(),
+        engine=ENGINE_ID,
+        zs_algo=resolved_zs,
         data_size=ChanDataSize(
             kline=len(raw),
             bi=len(all_bis),

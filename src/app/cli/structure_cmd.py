@@ -28,6 +28,8 @@ def run_structure(args: argparse.Namespace, *, root: Path) -> int:
         timeframe=interval,
         lookback=lookback,
         multi_tf=args.multi_tf,
+        engine_id=getattr(args, "engine", None),
+        zs_algo=getattr(args, "zs_algo", None),
     )
     if err or result is None:
         print(f"   ✗ {err or '结构计算失败'}", file=sys.stderr)

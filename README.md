@@ -131,6 +131,8 @@ deploy/               # docker、k8s、grafana
 
 可选 **`APP_CHAN_ENGINE_ROOT`** 覆盖内置计算库路径（旧环境变量名仍可读入，见 `config.py`）。
 
+**Phase 7（引擎差异）**：默认 **`structure-engine`**（chanpy）；可选 **`APP_CHAN_STRUCTURE_ENGINE=chanlun_icl`** 与 chanlun 原 ICL 对比；**`APP_CHAN_ZS_ALGO`**（`normal` / `over_seg` / `auto`）仅作用于 chanpy。详见 [docs/structure-engines.md](docs/structure-engines.md)。
+
 **K 线模式**（`.env` 中 `APP_KLINE_MODE`）：
 
 | 值 | 说明 |

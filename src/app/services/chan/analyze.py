@@ -9,6 +9,7 @@ import pandas as pd
 from app.core.config import get_settings
 
 from .backend import ENGINE_ID, ChanEngineICL
+from .engine_policy import resolve_zs_algo
 from .chart import (
     bi_to_chart_json,
     fx_to_chart_json,
@@ -37,14 +38,23 @@ def _apply_chan_engine_root() -> None:
         os.environ["CHAN_ENGINE_ROOT"] = root
 
 
-def _run_chan_engine(code: str, frequency: str, klines: List[Dict[str, Any]]) -> ChanEngineICL:
+def _run_chan_engine(
+    code: str,
+    frequency: str,
+    klines: List[Dict[str, Any]],
+    *,
+    zs_algo: str | None = None,
+) -> ChanEngineICL:
     if len(klines) < 50:
         raise ValueError(f"K 线数量不足，至少需要 50 根，当前 {len(klines)} 根")
     df = pd.DataFrame(klines)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     if df["date"].isna().any():
         raise ValueError("K 线 date 字段无效")
-    return ChanEngineICL(code, frequency, {}).process_klines(df)
+    cfg: Dict[str, Any] = {}
+    if zs_algo:
+        cfg["engine"] = {"zs_algo": zs_algo}
+    return ChanEngineICL(code, frequency, cfg).process_klines(df)
 
 
 def build_kline_chart_payload(
@@ -74,7 +84,12 @@ def build_kline_chart_payload(
         }
         for k in raw
     ]
-    icl = _run_chan_engine(symbol, interval_norm, engine_klines)
+    icl = _run_chan_engine(
+        symbol,
+        interval_norm,
+        engine_klines,
+        zs_algo=resolve_zs_algo(),
+    )
 
     bi_zs = icl.get_bi_zss()
     xd_zs = icl.get_xd_zss() if hasattr(icl, "get_xd_zss") else []
