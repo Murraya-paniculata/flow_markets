@@ -3,6 +3,8 @@
 与 ``flow_markets_deliverables.py``（Crew 各 Task 结构化交付物）区分。
 """
 
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.chan.kline import SUPPORTED_INTERVALS, normalize_interval
@@ -46,9 +48,13 @@ class FlowMarketsAnalyzeRequest(BaseModel):
         False,
         description="为 true 时启用多级别联立（4h/1h/15m JSON 预注入 AI）；须同时提供 symbol。",
     )
+    no_ai: bool = Field(
+        False,
+        description="为 true 时仅返回缠论结构（不调 LLM）；须同时提供 symbol，且不写入分析记忆库。",
+    )
     save: bool | None = Field(
         None,
-        description="为 true 时强制写入分析记忆库；为 false 时强制不写；省略时遵循 APP_ANALYSIS_SAVE。",
+        description="为 true 时强制写入分析记忆库；为 false 时强制不写；省略时遵循 APP_ANALYSIS_SAVE。no_ai 时忽略落库。",
     )
 
     @field_validator("timeframe")
@@ -57,10 +63,12 @@ class FlowMarketsAnalyzeRequest(BaseModel):
         return normalize_interval(v)
 
     @model_validator(mode="after")
-    def require_symbol_for_multi_tf(self) -> "FlowMarketsAnalyzeRequest":
+    def require_symbol_for_multi_tf_or_no_ai(self) -> "FlowMarketsAnalyzeRequest":
         sym = (self.symbol or "").strip()
         if self.multi_tf and not sym:
             raise ValueError("multi_tf=true 时必须提供 symbol")
+        if self.no_ai and not sym:
+            raise ValueError("no_ai=true 时必须提供 symbol")
         return self
 
 
@@ -71,5 +79,13 @@ class FlowMarketsAnalyzeResponse(BaseModel):
     message: str = Field("", description="提示或错误说明")
     report_content: str | None = Field(
         None,
-        description="最终研究交付物（Markdown）：由各 Task 的 Pydantic 结构化输出按序组装",
+        description="最终研究交付物（Markdown）：full 模式为 AI 报告；structure_only 为结构快览",
+    )
+    structure_only: bool = Field(
+        False,
+        description="true 表示 no_ai 结构模式，未调用 LLM",
+    )
+    structure_payload: dict[str, Any] | None = Field(
+        None,
+        description="缠论结构 JSON（单周期 snapshot 或多级别 snapshot）",
     )

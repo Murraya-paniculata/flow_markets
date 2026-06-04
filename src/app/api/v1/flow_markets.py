@@ -16,6 +16,7 @@ from app.services.analyze_streaming import (
     analyze_flow_markets_streaming,
     get_analysis_stream_result,
 )
+from app.services.structure_only import run_structure_only
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -43,9 +44,9 @@ def _build_task_id(body: FlowMarketsAnalyzeRequest) -> str:
     summary="FlowMarkets 交易研究分析",
     description=(
         "同步执行技术分析师（get_chan_structure + chan-analysis Skill → TechnicalAnalysisDeliverable）。"
-        "可选 timeframe / lookback 指定单周期；multi_tf=true 时联立 4h/1h/15m。"
-        "当前仅启用 technical_analyst，其余 Agent 已暂停。"
-        "需配置 LLM API Key（如通义千问 qwen-max）。"
+        "可选 timeframe / lookback / multi_tf / no_ai。"
+        "no_ai=true 时仅返回缠论结构 JSON，不调 LLM。"
+        "full 模式需配置 LLM API Key。"
     ),
 )
 async def analyze(
@@ -53,8 +54,48 @@ async def analyze(
     request_id: str = Depends(get_request_id),
     _api_key: str = Depends(require_api_key),
 ) -> ApiResponse[FlowMarketsAnalyzeResponse]:
-    """执行技术分析师单链，返回 Markdown 报告。"""
+    """执行分析：full 走技术分析师；no_ai 仅结构。"""
     analysis_mode = "multi_timeframe" if body.multi_tf else "single"
+
+    if body.no_ai:
+        try:
+            struct_result, err = await asyncio.to_thread(
+                run_structure_only,
+                symbol=body.symbol or "",
+                timeframe=body.timeframe,
+                lookback=body.lookback,
+                multi_tf=body.multi_tf,
+            )
+        except Exception as e:
+            logger.exception("flow_markets_structure_only_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=f"结构分析异常: {e}") from e
+
+        if err or struct_result is None:
+            return ApiResponse(
+                code=1,
+                message=err or "结构分析失败",
+                data=FlowMarketsAnalyzeResponse(
+                    success=False,
+                    message=err or "结构分析失败",
+                    report_content=None,
+                    structure_only=True,
+                ),
+                request_id=request_id,
+            )
+
+        return ApiResponse(
+            code=0,
+            message="ok",
+            data=FlowMarketsAnalyzeResponse(
+                success=True,
+                message="结构分析完成",
+                report_content=struct_result.report_content,
+                structure_only=True,
+                structure_payload=struct_result.structure_payload,
+            ),
+            request_id=request_id,
+        )
+
     try:
         report, err = await asyncio.to_thread(
             run_flow_markets_analysis,
@@ -98,8 +139,8 @@ async def analyze(
     "/analyze/stream",
     summary="FlowMarkets 交易研究分析（SSE 流式）",
     description=(
-        "以 Server-Sent Events 推送分析进度：K线 → 结构 → AI → 治理。"
-        "请求体与 POST /analyze 相同（timeframe / lookback / multi_tf / save）。"
+        "以 Server-Sent Events 推送分析进度。full：K线→结构→AI→治理；no_ai：K线→结构。"
+        "请求体与 POST /analyze 相同（含 no_ai）。"
         "事件：start → log（多条）→ result → complete；失败时 error。"
     ),
     response_class=StreamingResponse,
@@ -125,6 +166,7 @@ async def analyze_stream(
                 save=body.save,
                 analysis_mode=analysis_mode,
                 task_id=task_id,
+                no_ai=body.no_ai,
             ):
                 if ev.get("type") == "result":
                     yield _format_sse("result", ev["data"])

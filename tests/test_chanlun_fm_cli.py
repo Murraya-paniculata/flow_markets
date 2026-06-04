@@ -104,27 +104,9 @@ def test_structure_single_mock(capsys: pytest.CaptureFixture[str]) -> None:
     from app.cli.common import bootstrap
     from app.cli.structure_cmd import run_structure
 
-    root = bootstrap()
-    fake = MagicMock()
-    fake.meta.data_size.kline = 100
-    fake.meta.data_size.bi = 5
-    fake.meta.data_size.segment = 2
-    fake.meta.data_size.center = 1
-    fake.meta.symbol = "BTCUSDT"
-    fake.meta.interval = "1h"
-    fake.market.latest_price = 1.0
-    fake.center = []
-    fake.bi = []
-    fake.signal.buy_sell_points = []
-    fake.signal.divergences = []
-    fake.structure_summary.trend_description = "升"
-    fake.structure_summary.position_description = "上"
-    fake.structure_summary.key_levels.zg = 0
-    fake.structure_summary.key_levels.zd = 0
-    fake.structure_summary.key_levels.gg = 0
-    fake.structure_summary.key_levels.dd = 0
-    fake.model_dump.return_value = {"ok": True}
+    from app.services.structure_only import StructureOnlyResult
 
+    root = bootstrap()
     args = argparse.Namespace(
         symbol="BTCUSDT",
         interval="1h",
@@ -135,11 +117,17 @@ def test_structure_single_mock(capsys: pytest.CaptureFixture[str]) -> None:
     )
 
     with patch(
-        "app.services.chan.structure.build_chan_structure_snapshot",
-        return_value=fake,
+        "app.cli.structure_cmd.run_structure_only",
+        return_value=(
+            StructureOnlyResult(
+                report_content="结构完成",
+                structure_payload={"ok": True},
+            ),
+            "",
+        ),
     ):
         rc = run_structure(args, root=root)
 
     assert rc == 0
     out = capsys.readouterr().out
-    assert "结构分析完成" in out
+    assert "结构完成" in out

@@ -39,6 +39,20 @@ def test_analyze_request_multi_tf_requires_symbol() -> None:
         FlowMarketsAnalyzeRequest(user_query="x", multi_tf=True)
 
 
+def test_analyze_request_no_ai_requires_symbol() -> None:
+    with pytest.raises(ValidationError, match="symbol"):
+        FlowMarketsAnalyzeRequest(user_query="x", no_ai=True)
+
+
+def test_analyze_request_no_ai_defaults() -> None:
+    req = FlowMarketsAnalyzeRequest(
+        user_query="结构",
+        symbol="BTCUSDT",
+        no_ai=True,
+    )
+    assert req.no_ai is True
+
+
 @pytest.mark.asyncio
 async def test_analyze_endpoint_passes_timeframe_lookback_multi_tf() -> None:
     captured: dict = {}
@@ -118,3 +132,47 @@ async def test_analyze_endpoint_422_multi_tf_without_symbol() -> None:
             headers={"X-API-Key": "dev-no-key"},
         )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_analyze_endpoint_no_ai_calls_structure_only() -> None:
+    fake_payload = {"meta": {"symbol": "BTCUSDT", "interval": "1h"}}
+    fake_result = type(
+        "R",
+        (),
+        {
+            "report_content": "# 结构快览",
+            "structure_payload": fake_payload,
+            "multi_tf": False,
+        },
+    )()
+
+    with patch(
+        "app.api.v1.flow_markets.run_structure_only",
+        return_value=(fake_result, ""),
+    ) as mock_struct:
+        with patch("app.api.v1.flow_markets.run_flow_markets_analysis") as mock_full:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/flow-markets/analyze",
+                    json={
+                        "user_query": "结构快览",
+                        "symbol": "BTCUSDT",
+                        "timeframe": "1h",
+                        "no_ai": True,
+                    },
+                    headers={"X-API-Key": "dev-no-key"},
+                )
+
+    assert r.status_code == 200, r.text
+    mock_struct.assert_called_once()
+    mock_full.assert_not_called()
+    data = r.json()
+    assert data["code"] == 0
+    payload = data["data"]
+    assert payload["structure_only"] is True
+    assert payload["structure_payload"] == fake_payload
+    assert payload["report_content"] == "# 结构快览"

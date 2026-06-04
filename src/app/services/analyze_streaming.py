@@ -36,6 +36,7 @@ from app.services.chan.multi_timeframe import (
     build_multi_timeframe_snapshot,
     format_multi_timeframe_for_prompt,
 )
+from app.services.structure_only import structure_payload_from_snapshot
 from app.services.chan.structure import MIN_KLINES, build_chan_structure_snapshot
 
 logger = get_logger(__name__)
@@ -105,12 +106,16 @@ def _build_final_result(
     message: str,
     report_content: str | None,
     deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
+    structure_only: bool = False,
+    structure_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "success": success,
         "message": message,
         "report_content": report_content,
         "deliverable": _deliverable_payload(deliverable),
+        "structure_only": structure_only,
+        "structure_payload": structure_payload,
     }
 
 
@@ -124,27 +129,29 @@ async def analyze_flow_markets_streaming(
     save: bool | None = None,
     analysis_mode: str = _ANALYSIS_MODE_SINGLE,
     task_id: str,
+    no_ai: bool = False,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """
     流式分析主函数：yield 日志 dict；结束时 yield ``{"type": "result", "data": ...}``。
 
-    步骤：1 K线 → 2 结构 → 3 AI → 4 治理
+    步骤：no_ai 时 K线 → 结构；否则 K线 → 结构 → AI → 治理
     """
     settings = get_settings()
     mode = analysis_mode if analysis_mode in (_ANALYSIS_MODE_SINGLE, _ANALYSIS_MODE_MULTI) else _ANALYSIS_MODE_SINGLE
     persist_tf = _PRIMARY_TF_MULTI if mode == _ANALYSIS_MODE_MULTI else timeframe
     disp = _display_symbol(symbol)
     capped = cap_limit(persist_tf if mode == _ANALYSIS_MODE_SINGLE else "1h", lookback)
+    total_steps = 2 if no_ai else TOTAL_STEPS
 
     yield _emit_log(
         "step",
-        f"🚀 开始分析 {disp} · {persist_tf}（lookback={capped}，模式={mode}）",
+        f"🚀 开始{'结构' if no_ai else '分析'} {disp} · {persist_tf}（lookback={capped}，模式={mode}）",
         step=0,
         phase="start",
     )
     await asyncio.sleep(0)
 
-    if not (settings.llm_api_key or "").strip():
+    if not no_ai and not (settings.llm_api_key or "").strip():
         result = _build_final_result(
             success=False,
             message="未配置 APP_LLM_API_KEY（或 QWEN_API_KEY / DEEPSEEK_API_KEY），无法调用大模型",
@@ -165,7 +172,7 @@ async def analyze_flow_markets_streaming(
     if mode == _ANALYSIS_MODE_MULTI:
         yield _emit_log(
             "step",
-            f"📊 步骤 1/{TOTAL_STEPS}: 拉取多级别 K 线（4h / 1h / 15m × {capped}）...",
+            f"📊 步骤 1/{total_steps}: 拉取多级别 K 线（4h / 1h / 15m × {capped}）...",
             step=1,
             phase="kline",
         )
@@ -180,12 +187,19 @@ async def analyze_flow_markets_streaming(
     else:
         yield _emit_log(
             "step",
-            f"📊 步骤 1/{TOTAL_STEPS}: 获取 Binance K 线（{timeframe} × {capped}）...",
+            f"📊 步骤 1/{total_steps}: 获取 Binance K 线（{timeframe} × {capped}）...",
             step=1,
             phase="kline",
         )
         await asyncio.sleep(0)
         if not sym:
+            if no_ai:
+                msg = "no_ai 模式需要有效 symbol"
+                result = _build_final_result(False, msg, None, None)
+                _stream_result_store[task_id] = result
+                yield _emit_log("error", f"✗ {msg}", step=1, phase="kline")
+                yield {"type": "result", "data": result}
+                return
             yield _emit_log(
                 "info",
                 "   ℹ 未指定 symbol，跳过预拉 K 线（AI 阶段仍可从 user_query 推断）",
@@ -250,7 +264,7 @@ async def analyze_flow_markets_streaming(
     # --- 步骤 2：结构 ---
     yield _emit_log(
         "step",
-        f"🧮 步骤 2/{TOTAL_STEPS}: 缠论结构计算...",
+        f"🧮 步骤 2/{total_steps}: 缠论结构计算...",
         step=2,
         phase="structure",
     )
@@ -325,6 +339,38 @@ async def analyze_flow_markets_streaming(
             phase="structure",
         )
         await asyncio.sleep(0)
+
+    if no_ai:
+        try:
+            if mode == _ANALYSIS_MODE_MULTI:
+                assert mtf_snapshot is not None
+                struct = structure_payload_from_snapshot(mtf_snapshot, multi_tf=True)
+            else:
+                assert snapshot is not None
+                struct = structure_payload_from_snapshot(snapshot, multi_tf=False)
+        except Exception as exc:
+            msg = f"结构结果组装失败: {exc}"
+            result = _build_final_result(False, msg, None, None)
+            _stream_result_store[task_id] = result
+            yield _emit_log("error", f"✗ {msg}", step=2, phase="structure")
+            yield {"type": "result", "data": result}
+            return
+
+        yield _emit_log("info", "   ℹ 已跳过 AI 与治理（no_ai=true）", step=2, phase="structure")
+        await asyncio.sleep(0)
+        result = _build_final_result(
+            success=True,
+            message="结构分析完成",
+            report_content=struct.report_content,
+            deliverable=None,
+            structure_only=True,
+            structure_payload=struct.structure_payload,
+        )
+        _stream_result_store[task_id] = result
+        yield _emit_log("success", f"✅ 结构分析完成（task_id={task_id}）", step=2, phase="structure")
+        await asyncio.sleep(0)
+        yield {"type": "result", "data": result}
+        return
 
     # --- 步骤 3：AI ---
     if mode == _ANALYSIS_MODE_MULTI and mtf_ctx is None:
