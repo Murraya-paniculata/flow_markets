@@ -213,6 +213,31 @@ uv run python scripts/multi_timeframe_analyze.py BTCUSDT --no-ai --json
 
 等价细粒度脚本：`scripts/run_technical_analyst.py`、`scripts/run_get_chan_structure.py`。
 
+#### 分析记忆库：统计与导出（`--save` + 回填后）
+
+```bash
+# 回填预测结果（需先有 --save 的快照）
+uv run python scripts/evaluate_outcomes.py
+
+# 胜率报表：趋势 / 位置 / 信号类型 / 信号质量 A-B-C-D 等
+uv run python scripts/query_analysis_stats.py
+uv run python scripts/query_analysis_stats.py --accuracy --symbol BTC/USDT --interval 1h
+
+# 导出可计分记录 CSV（含结构上下文与 signal_quality 列）
+uv run python scripts/query_analysis_stats.py --export-csv output/stats_export.csv
+
+# 逐条查看快照 / 宽表 CSV
+uv run python scripts/show_analysis_db.py --csv -o output/analysis_snapshots.csv
+
+# 统计图表 PNG（需 matplotlib: uv sync --extra chart）
+uv run python scripts/stats_visualizer.py
+uv run python scripts/query_analysis_stats.py --charts
+
+# 权重优化（建议 ≥50 条可计分记录后再 --save）
+uv run python scripts/weight_optimizer.py
+uv run python scripts/weight_optimizer.py --save --method correlation
+```
+
 ## 测试
 
 ```bash

@@ -43,6 +43,21 @@ from app.analysis_store.signal_quality import (
     calculate_signal_quality,
     format_quality_report,
 )
+from app.analysis_store.query_stats_cli import (
+    export_stats_csv,
+    print_accuracy_report,
+    print_db_overview,
+    print_outcomes,
+    print_snapshots,
+)
+from app.analysis_store.stats_visualizer import (
+    MatplotlibNotAvailableError,
+    generate_all_stats_charts,
+)
+from app.analysis_store.weight_optimizer import WeightOptimizer, run_weight_optimization
+
+# 兼容旧名
+generate_all_charts = generate_all_stats_charts
 
 __all__ = [
     "get_db_conn",
@@ -77,4 +92,14 @@ __all__ = [
     "apply_signal_quality_to_deliverable",
     "calculate_signal_quality",
     "format_quality_report",
+    "export_stats_csv",
+    "print_accuracy_report",
+    "print_db_overview",
+    "print_outcomes",
+    "print_snapshots",
+    "generate_all_stats_charts",
+    "generate_all_charts",
+    "MatplotlibNotAvailableError",
+    "WeightOptimizer",
+    "run_weight_optimization",
 ]

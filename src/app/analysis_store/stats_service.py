@@ -21,6 +21,7 @@ class EvaluatedRecord:
     id: int
     symbol: str
     interval: str
+    timestamp: str
     price: float
     ai: dict[str, Any]
     outcome: dict[str, Any]
@@ -166,7 +167,7 @@ class StatsService:
         interval: str | None = None,
     ) -> list[EvaluatedRecord]:
         query = """
-            SELECT id, symbol, interval, price, ai_json, outcome_json, chanlun_json
+            SELECT id, symbol, interval, timestamp, price, ai_json, outcome_json, chanlun_json
             FROM analysis_snapshot
             WHERE evaluated = 1
               AND ai_json IS NOT NULL
@@ -184,7 +185,7 @@ class StatsService:
             rows = conn.execute(query, params).fetchall()
 
         records: list[EvaluatedRecord] = []
-        for rid, sym, intv, price, ai_str, outcome_str, chanlun_str in rows:
+        for rid, sym, intv, ts, price, ai_str, outcome_str, chanlun_str in rows:
             try:
                 ai = safe_json_loads(ai_str, {})
                 outcome = safe_json_loads(outcome_str, {})
@@ -199,6 +200,7 @@ class StatsService:
                     id=int(rid),
                     symbol=str(sym),
                     interval=str(intv),
+                    timestamp=str(ts),
                     price=float(price),
                     ai=ai,
                     outcome=outcome,

@@ -48,6 +48,7 @@ logs/
 *.log.*
 *.sqlite
 *.sqlite3
+optimized_weights.json
 .cache/
 tmp/
 temp/
