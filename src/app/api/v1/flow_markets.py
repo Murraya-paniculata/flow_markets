@@ -20,6 +20,7 @@ logger = get_logger(__name__)
     summary="FlowMarkets 交易研究分析",
     description=(
         "同步执行技术分析师（get_chan_structure + chan-analysis Skill → TechnicalAnalysisDeliverable）。"
+        "可选 timeframe / lookback 指定单周期；multi_tf=true 时联立 4h/1h/15m。"
         "当前仅启用 technical_analyst，其余 Agent 已暂停。"
         "需配置 LLM API Key（如通义千问 qwen-max）。"
     ),
@@ -30,13 +31,17 @@ async def analyze(
     _api_key: str = Depends(require_api_key),
 ) -> ApiResponse[FlowMarketsAnalyzeResponse]:
     """执行技术分析师单链，返回 Markdown 报告。"""
+    analysis_mode = "multi_timeframe" if body.multi_tf else "single"
     try:
         report, err = await asyncio.to_thread(
             run_flow_markets_analysis,
             user_query=body.user_query,
             symbol=body.symbol,
             notes=body.notes,
+            timeframe=body.timeframe,
+            lookback=body.lookback,
             save=body.save,
+            analysis_mode=analysis_mode,
         )
     except Exception as e:
         logger.exception("flow_markets_api_failed", error=str(e))
