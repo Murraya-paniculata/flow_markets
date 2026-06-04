@@ -106,7 +106,8 @@ def test_kickoff_full_split_injects_synthesis_fields(
     assert deliverable is governed
     assert len(merged.tasks_output) == 3
     down_inputs = down_crew.kickoff.call_args.kwargs["inputs"]
-    assert "governed_technical_context" in down_inputs
+    assert "state_machine_summary" in down_inputs
+    assert "signal_quality_summary" in down_inputs
+    assert "execution_stats_context" in down_inputs
     assert "governed" in down_inputs["governed_technical_context"]
-    assert "analysis_stats_context" in down_inputs
     assert "upstream_market_context" in down_inputs

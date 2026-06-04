@@ -145,7 +145,27 @@ task_fm_trading:
   context:
     - task_fm_synthesis
   description: |
-    基于研究经理综合摘要，交付 TradingPlaybook：可讨论的交易思路类型（非下单指令）。
+    用户诉求：{{user_query}}，标的：{{symbol}}。
+    结合上游 task_fm_synthesis 的 ResearchSynthesis，并**优先**服从下列服务端注入（治理后状态机与统计）。
+
+    --- 研究经理综合（Crew context 亦有 JSON，以本段与下列约束为准）---
+
+    --- 缠论状态机快览（必读）---
+    {{state_machine_summary}}
+
+    --- 信号质量（必读）---
+    {{signal_quality_summary}}
+
+    --- 分析记忆库统计（引用胜率须注明样本量；勿编造）---
+    {{execution_stats_context}}
+
+    【TradingPlaybook 规则】
+    - current_state=OBSERVE_ONLY → stance 宜「观望」或「情景驱动」；watch_triggers 为主，禁止具体价位入场
+    - WAIT_CONFIRMATION → 禁止偏多/偏空思路；只写确认条件
+    - signal_quality.action 为 skip/wait → 同上，execution_discipline 须含「模拟/回测优先」
+    - STRATEGY_ACTIVE 且与 synthesis 一致 → 方可写 entry_logic_types（抽象逻辑类型，非下单指令）
+    - 不接入回测引擎：不得声称「历史回测证明盈利」；可写「建议先模拟/纸面验证」
+    - high_risk_warnings 须覆盖杠杆/合约尾部风险（若相关）
   expected_output: |
     符合 TradingPlaybook 契约的完整 JSON；强调模拟与回测优先。
 
@@ -155,6 +175,22 @@ task_fm_portfolio:
     - task_fm_synthesis
     - task_fm_trading
   description: |
-    交付 PortfolioBrief：组合视角的浓度、相关性、风险预算与再平衡原则；完整 disclaimer。
+    用户诉求：{{user_query}}，标的：{{symbol}}。
+    结合 ResearchSynthesis、TradingPlaybook，并服从治理后状态机与统计（与 trader 同源）。
+
+    --- 缠论状态机快览 ---
+    {{state_machine_summary}}
+
+    --- 信号质量 ---
+    {{signal_quality_summary}}
+
+    --- 分析记忆库统计 ---
+    {{execution_stats_context}}
+
+    【PortfolioBrief 规则】
+    - 风险预算与 trading 的 stance 一致；OBSERVE_ONLY / 低质量信号时偏防御、降低战术层暴露
+    - stress_narratives 覆盖状态机 invalidation 与 synthesis 备选情景
+    - 不重复论证笔/中枢；不做回测净值预测
+    - disclaimer 完整（非投资建议、适用人群、波动风险）
   expected_output: |
     符合 PortfolioBrief 契约的完整 JSON；作为研究链终稿章节之一。

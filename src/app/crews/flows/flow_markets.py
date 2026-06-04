@@ -30,6 +30,7 @@ from app.schemas.flow_markets_deliverables import (
     SentimentAssessment,
     TechnicalAnalysisDeliverable,
     TradingPlaybook,
+    TradingPlaybook,
     assemble_flow_markets_report,
 )
 from app.crews.flows.flow_markets_mode import (
@@ -46,7 +47,10 @@ from app.services.analysis_output import (
     should_write_output_artifacts,
     write_analyze_save_artifacts,
 )
-from app.services.synthesis_context import build_synthesis_injection_fields
+from app.services.synthesis_context import (
+    build_full_downstream_injection_fields,
+    check_trading_playbook_alignment,
+)
 from app.services.chan.multi_timeframe import (
     _SINGLE_MODE_CONTEXT,
     build_multi_timeframe_snapshot,
@@ -380,7 +384,7 @@ def _kickoff_full_flow_markets_split(
         symbol_hint=symbol_hint,
     )
 
-    synthesis_fields = build_synthesis_injection_fields(
+    synthesis_fields = build_full_downstream_injection_fields(
         governed_technical=governed if isinstance(governed, TechnicalAnalysisDeliverable) else None,
         market=_extract_deliverable_by_type(upstream_result, MarketStructureBrief),
         narrative=_extract_deliverable_by_type(upstream_result, NarrativeBrief),
@@ -394,6 +398,16 @@ def _kickoff_full_flow_markets_split(
     logger.info("flow_markets_full_downstream_start")
     downstream_result = downstream.kickoff(inputs=downstream_inputs)
     logger.info("flow_markets_full_downstream_done")
+
+    synthesis_out = _extract_deliverable_by_type(downstream_result, ResearchSynthesis)
+    trading_out = _extract_deliverable_by_type(downstream_result, TradingPlaybook)
+    if isinstance(trading_out, TradingPlaybook) and isinstance(governed, TechnicalAnalysisDeliverable):
+        for warn in check_trading_playbook_alignment(
+            trading_out,
+            governed,
+            synthesis=synthesis_out if isinstance(synthesis_out, ResearchSynthesis) else None,
+        ):
+            logger.warning("trading_playbook_alignment", message=warn)
 
     merged = _merge_kickoff_results(upstream_result, downstream_result)
     if isinstance(governed, TechnicalAnalysisDeliverable):
