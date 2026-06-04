@@ -46,6 +46,7 @@ from app.services.analysis_output import (
     should_write_output_artifacts,
     write_analyze_save_artifacts,
 )
+from app.services.synthesis_context import build_synthesis_injection_fields
 from app.services.chan.multi_timeframe import (
     _SINGLE_MODE_CONTEXT,
     build_multi_timeframe_snapshot,
@@ -245,6 +246,194 @@ class FlowMarketsCrew:
             process=Process.sequential,
             verbose=True,
         )
+
+
+def _extract_deliverable_by_type(
+    result: Any,
+    model_type: type,
+) -> Any | None:
+    """从 kickoff 的 tasks_output 中按 Pydantic 类型取首个匹配交付物。"""
+    tasks_out = getattr(result, "tasks_output", None) or []
+    for out in tasks_out:
+        p = getattr(out, "pydantic", None)
+        if isinstance(p, model_type):
+            return p
+    return None
+
+
+def _merge_kickoff_results(upstream: Any, downstream: Any) -> Any:
+    """合并两段 Crew 的 tasks_output，供 ``assemble_flow_markets_report`` 使用。"""
+
+    class _Merged:
+        pass
+
+    merged = _Merged()
+    up_out = list(getattr(upstream, "tasks_output", None) or [])
+    down_out = list(getattr(downstream, "tasks_output", None) or [])
+    merged.tasks_output = up_out + down_out  # type: ignore[attr-defined]
+    return merged
+
+
+def _patch_governed_technical_in_merged_result(
+    merged: Any,
+    governed: TechnicalAnalysisDeliverable,
+) -> None:
+    """报告中的技术章使用治理后交付物，而非链内原始 technical 输出。"""
+    for out in getattr(merged, "tasks_output", None) or []:
+        if isinstance(getattr(out, "pydantic", None), TechnicalAnalysisDeliverable):
+            try:
+                out.pydantic = governed  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+
+def _create_upstream_crew(flow: FlowMarketsCrew) -> Crew:
+    """full 模式第一段：market → narrative → sentiment → technical。"""
+    return Crew(
+        agents=[
+            flow.market_analyst(),
+            flow.narrative_analyst(),
+            flow.sentiment_analyst(),
+            flow.technical_analyst(),
+        ],
+        tasks=[
+            flow.task_fm_market(),
+            flow.task_fm_narrative(),
+            flow.task_fm_sentiment(),
+            flow.task_fm_technical(),
+        ],
+        process=Process.sequential,
+        verbose=True,
+    )
+
+
+def _downstream_synthesis_task(flow: FlowMarketsCrew) -> Task:
+    """synthesis 无 Crew context，依赖服务端注入的四域 + 治理后 technical + stats。"""
+    cfg = dict(flow.tasks_config["task_fm_synthesis"])  # type: ignore[index]
+    cfg["context"] = []
+    return Task(config=cfg, output_pydantic=ResearchSynthesis)
+
+
+def _create_downstream_crew(flow: FlowMarketsCrew) -> Crew:
+    """full 模式第二段：synthesis → trading → portfolio。"""
+    return Crew(
+        agents=[
+            flow.research_manager(),
+            flow.trader(),
+            flow.portfolio_manager(),
+        ],
+        tasks=[
+            _downstream_synthesis_task(flow),
+            flow.task_fm_trading(),
+            flow.task_fm_portfolio(),
+        ],
+        process=Process.sequential,
+        verbose=True,
+    )
+
+
+def _govern_technical_deliverable(
+    deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None,
+    *,
+    timeframe: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> TechnicalAnalysisDeliverable | dict[str, Any] | None:
+    deliverable = _apply_history_enforcement(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+    return _apply_signal_quality(
+        deliverable,
+        timeframe=timeframe,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+
+
+def _kickoff_full_flow_markets_split(
+    flow: FlowMarketsCrew,
+    inputs: dict[str, Any],
+    *,
+    persist_tf: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> tuple[Any, TechnicalAnalysisDeliverable | dict[str, Any] | None]:
+    """
+    Phase 6.3：上游 Crew → 治理 technical → 注入 stats → 下游 Crew。
+    """
+    upstream = _create_upstream_crew(flow)
+    logger.info("flow_markets_full_upstream_start")
+    upstream_result = upstream.kickoff(inputs=inputs)
+    logger.info("flow_markets_full_upstream_done")
+
+    raw_technical = _extract_deliverable_by_type(
+        upstream_result,
+        TechnicalAnalysisDeliverable,
+    )
+    governed = _govern_technical_deliverable(
+        raw_technical,
+        timeframe=persist_tf,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+
+    synthesis_fields = build_synthesis_injection_fields(
+        governed_technical=governed if isinstance(governed, TechnicalAnalysisDeliverable) else None,
+        market=_extract_deliverable_by_type(upstream_result, MarketStructureBrief),
+        narrative=_extract_deliverable_by_type(upstream_result, NarrativeBrief),
+        sentiment=_extract_deliverable_by_type(upstream_result, SentimentAssessment),
+        symbol_hint=symbol_hint,
+        timeframe=persist_tf,
+    )
+    downstream_inputs = {**inputs, **synthesis_fields}
+
+    downstream = _create_downstream_crew(flow)
+    logger.info("flow_markets_full_downstream_start")
+    downstream_result = downstream.kickoff(inputs=downstream_inputs)
+    logger.info("flow_markets_full_downstream_done")
+
+    merged = _merge_kickoff_results(upstream_result, downstream_result)
+    if isinstance(governed, TechnicalAnalysisDeliverable):
+        _patch_governed_technical_in_merged_result(merged, governed)
+    return merged, governed
+
+
+def _execute_flow_markets_crew(
+    flow: FlowMarketsCrew,
+    inputs: dict[str, Any],
+    *,
+    persist_tf: str,
+    lookback: int,
+    symbol_hint: str | None,
+) -> tuple[Any, TechnicalAnalysisDeliverable | dict[str, Any] | None, str]:
+    """执行 Crew；full 模式为两段链，返回 (kickoff_result, 治理后 technical, metrics_name)。"""
+    if is_flow_markets_full_mode():
+        merged, governed = _kickoff_full_flow_markets_split(
+            flow,
+            inputs,
+            persist_tf=persist_tf,
+            lookback=lookback,
+            symbol_hint=symbol_hint,
+        )
+        return merged, governed, "flow_markets_full"
+
+    crew_obj, metrics_name = create_flow_markets_crew_for_run(
+        flow,
+        force_technical_only=True,
+    )
+    result = crew_obj.kickoff(inputs=inputs)
+    governed = _govern_technical_deliverable(
+        _extract_technical_deliverable(result),
+        timeframe=persist_tf,
+        lookback=lookback,
+        symbol_hint=symbol_hint,
+    )
+    if isinstance(governed, TechnicalAnalysisDeliverable):
+        _patch_governed_technical_in_merged_result(result, governed)
+    return result, governed, metrics_name
 
 
 def _extract_technical_deliverable(
@@ -447,10 +636,10 @@ def create_flow_markets_crew_for_run(
     force_technical_only: bool = False,
 ) -> tuple[Crew, str]:
     """
-    构建待 kickoff 的 Crew。
+    构建待 kickoff 的 Crew（流式等仍可用）。
 
-    - 默认 / ``technical_only``：独立 technical Task（与 Phase 5 一致）
-    - ``full``：7 角色 Sequential 全链
+    - ``technical_only``：独立 technical Task
+    - ``full``：返回上游 4 Task Crew；完整两段链请用 ``_execute_flow_markets_crew``
     """
     if force_technical_only or not is_flow_markets_full_mode():
         agent = flow.technical_analyst()
@@ -459,7 +648,7 @@ def create_flow_markets_crew_for_run(
             Crew(agents=[agent], tasks=[task], verbose=True),
             "flow_markets",
         )
-    return flow.crew(), "flow_markets_full"
+    return _create_upstream_crew(flow), "flow_markets_full_upstream"
 
 
 def run_technical_analyst_only(
@@ -574,7 +763,7 @@ def run_flow_markets_analysis(
     执行 FlowMarkets 编排。
 
     ``APP_FLOW_MARKETS_MODE=technical_only``（默认）时仅技术分析师；
-    ``full`` 时跑完整研究链，技术交付物仍经治理与可选落库/写盘。
+    ``full`` 时两段链：上游四域 → 治理 technical → 注入 stats → synthesis/trader/portfolio。
 
     Returns:
         (report_markdown, error_message, output_files)；成功时 error_message 为空。
@@ -604,19 +793,24 @@ def run_flow_markets_analysis(
     )
 
     flow = FlowMarketsCrew()
-    crew_obj, metrics_name = create_flow_markets_crew_for_run(flow)
+    metrics_name = "flow_markets"
     t0 = time.perf_counter()
     logger.info(
         "flow_markets_start",
         user_query_preview=user_query[:120],
         flow_markets_mode=get_flow_markets_mode(),
-        metrics_flow=metrics_name,
         timeframe=persist_tf,
         lookback=lookback,
         analysis_mode=mode,
     )
     try:
-        result = crew_obj.kickoff(inputs=inputs)
+        result, deliverable, metrics_name = _execute_flow_markets_crew(
+            flow,
+            inputs,
+            persist_tf=persist_tf,
+            lookback=lookback,
+            symbol_hint=symbol,
+        )
     except Exception as e:
         logger.exception("flow_markets_failed", error=str(e))
         return None, f"FlowMarkets 执行失败: {e}", []
@@ -628,19 +822,6 @@ def run_flow_markets_analysis(
             logger.warning("flow_markets_metrics_observe_failed", exc_info=True)
         logger.info("flow_markets_done", elapsed_seconds=round(elapsed, 3))
 
-    deliverable = _extract_technical_deliverable(result)
-    deliverable = _apply_history_enforcement(
-        deliverable,
-        timeframe=persist_tf,
-        lookback=lookback,
-        symbol_hint=symbol,
-    )
-    deliverable = _apply_signal_quality(
-        deliverable,
-        timeframe=persist_tf,
-        lookback=lookback,
-        symbol_hint=symbol,
-    )
     _maybe_persist_technical_deliverable(
         deliverable,
         timeframe=persist_tf,

@@ -61,7 +61,7 @@ PYTHONPATH=src python -m app
 - 指标: `GET /metrics`
 - 示例接口: `GET /api/v1/demo/ping`（需请求头 `X-API-Key`，开发环境可不配置 APP_API_KEYS）
 - **Demo 深度调研**: `POST /api/v1/demo/deep-research`，请求体须为 JSON：必填 `topic`（非空字符串，1–500 字），可选 `extra_instructions`（字符串或 null）。需请求头 `Content-Type: application/json`、`X-API-Key`。返回 422 时查看响应 `detail` 定位校验错误。需配置 LLM + 百度搜索 API Key。
-- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`（同步）、`POST /api/v1/flow-markets/analyze/stream`（SSE）。JSON 必填 `user_query`，可选 `symbol`、`timeframe`、`lookback`、`multi_tf`、`no_ai`、`save`（`save=true` 写 `output/` 并落库；省略则仅 `APP_ANALYSIS_SAVE` 落库）。Crew 模式：`APP_FLOW_MARKETS_MODE` / `FLOW_MARKETS_MODE` 为 `technical_only`（默认）或 `full`；`full` 时 market/narrative/sentiment 使用 `get_market_ticker_summary` 与 `baidu_search`（需 `APP_BAIDU_API_KEY`）。
+- **FlowMarkets 交易研究**: `POST /api/v1/flow-markets/analyze`（同步）、`POST /api/v1/flow-markets/analyze/stream`（SSE）。JSON 必填 `user_query`，可选 `symbol`、`timeframe`、`lookback`、`multi_tf`、`no_ai`、`save`（`save=true` 写 `output/` 并落库；省略则仅 `APP_ANALYSIS_SAVE` 落库）。Crew：`APP_FLOW_MARKETS_MODE` / `FLOW_MARKETS_MODE` 为 `technical_only`（默认）或 `full`；`full` 为两段链（上游四域 → 治理 technical → 注入 stats → synthesis/trader/portfolio，Phase 6.3），上游使用 `get_market_ticker_summary` 与 `baidu_search`（需 `APP_BAIDU_API_KEY`）。
 
 ## 项目结构
 

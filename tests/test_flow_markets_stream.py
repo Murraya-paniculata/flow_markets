@@ -179,17 +179,8 @@ async def test_streaming_pipeline_phases_with_mocks() -> None:
             "app.services.analyze_streaming.create_flow_markets_crew_for_run",
         ) as mock_create_crew,
         patch(
-            "app.services.analyze_streaming._apply_history_enforcement",
-            side_effect=lambda d, **_: d,
-        ),
-        patch(
-            "app.services.analyze_streaming._apply_signal_quality",
-            side_effect=lambda d, **_: d,
-        ),
-        patch(
-            "app.services.analyze_streaming._extract_technical_deliverable",
-            return_value=deliverable,
-        ),
+            "app.services.analyze_streaming._execute_flow_markets_crew",
+        ) as mock_execute,
         patch("app.services.analyze_streaming._maybe_persist_technical_deliverable", return_value=None),
         patch(
             "app.services.analyze_streaming.assemble_flow_markets_report",
@@ -201,6 +192,7 @@ async def test_streaming_pipeline_phases_with_mocks() -> None:
         mock_crew_obj = MagicMock()
         mock_crew_obj.kickoff.return_value = crew_result
         mock_create_crew.return_value = (mock_crew_obj, "flow_markets")
+        mock_execute.return_value = (crew_result, deliverable, "flow_markets")
         events: list[dict[str, Any]] = []
         async for ev in streaming_mod.analyze_flow_markets_streaming(
             user_query="测试",

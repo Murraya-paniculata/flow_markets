@@ -14,10 +14,10 @@ from app.crews.flows.flow_markets import (
     _ANALYSIS_MODE_MULTI,
     _ANALYSIS_MODE_SINGLE,
     _PRIMARY_TF_MULTI,
-    _apply_history_enforcement,
-    _apply_signal_quality,
     _build_technical_crew_inputs,
+    _execute_flow_markets_crew,
     _extract_technical_deliverable,
+    _govern_technical_deliverable,
     _maybe_persist_technical_deliverable,
     _resolve_multi_timeframe_context,
     create_flow_markets_crew_for_run,
@@ -438,11 +438,30 @@ async def analyze_flow_markets_streaming(
     await asyncio.sleep(0)
 
     flow = FlowMarketsCrew()
-    crew_obj, stream_metrics_name = create_flow_markets_crew_for_run(flow)
-
+    stream_metrics_name = "flow_markets"
+    deliverable: TechnicalAnalysisDeliverable | dict[str, Any] | None = None
     t0 = time.perf_counter()
     try:
-        crew_result = await asyncio.to_thread(crew_obj.kickoff, inputs=inputs)
+        if is_flow_markets_full_mode():
+            yield _emit_log(
+                "info",
+                "   ℹ full：上游四域 → 治理 technical → 注入 stats → 综合/交易/组合",
+                step=3,
+                phase="ai",
+            )
+            await asyncio.sleep(0)
+            crew_result, deliverable, stream_metrics_name = await asyncio.to_thread(
+                _execute_flow_markets_crew,
+                flow,
+                inputs,
+                persist_tf=persist_tf,
+                lookback=lookback,
+                symbol_hint=symbol,
+            )
+        else:
+            crew_obj, stream_metrics_name = create_flow_markets_crew_for_run(flow)
+            crew_result = await asyncio.to_thread(crew_obj.kickoff, inputs=inputs)
+            deliverable = _extract_technical_deliverable(crew_result)
     except Exception as exc:
         logger.exception("analyze_streaming_ai_failed", error=str(exc))
         msg = f"FlowMarkets 执行失败: {exc}"
@@ -466,9 +485,7 @@ async def analyze_flow_markets_streaming(
     )
     await asyncio.sleep(0)
 
-    deliverable = _extract_technical_deliverable(crew_result)
-
-    # --- 步骤 4：治理 ---
+    # --- 步骤 4：治理（technical_only 在此执行；full 已在 synthesis 前完成）---
     yield _emit_log(
         "step",
         f"📋 步骤 4/{TOTAL_STEPS}: 治理（历史约束 + 信号质量 + 落库）...",
@@ -477,23 +494,25 @@ async def analyze_flow_markets_streaming(
     )
     await asyncio.sleep(0)
 
-    deliverable = _apply_history_enforcement(
-        deliverable,
-        timeframe=persist_tf,
-        lookback=lookback,
-        symbol_hint=symbol,
-    )
-    yield _emit_log("success", "   ✓ 历史约束（history enforcement）已应用", step=4, phase="governance")
-    await asyncio.sleep(0)
-
-    deliverable = _apply_signal_quality(
-        deliverable,
-        timeframe=persist_tf,
-        lookback=lookback,
-        symbol_hint=symbol,
-    )
-    yield _emit_log("success", "   ✓ 信号质量评分已写入 brief/snapshot", step=4, phase="governance")
-    await asyncio.sleep(0)
+    if not is_flow_markets_full_mode():
+        deliverable = _govern_technical_deliverable(
+            deliverable,
+            timeframe=persist_tf,
+            lookback=lookback,
+            symbol_hint=symbol,
+        )
+        yield _emit_log("success", "   ✓ 历史约束（history enforcement）已应用", step=4, phase="governance")
+        await asyncio.sleep(0)
+        yield _emit_log("success", "   ✓ 信号质量评分已写入 brief/snapshot", step=4, phase="governance")
+        await asyncio.sleep(0)
+    else:
+        yield _emit_log(
+            "success",
+            "   ✓ 技术域已在研究经理综合前完成治理（enforcement + signal_quality）",
+            step=4,
+            phase="governance",
+        )
+        await asyncio.sleep(0)
 
     record_id = _maybe_persist_technical_deliverable(
         deliverable,

@@ -111,15 +111,34 @@ task_fm_technical:
 
 task_fm_synthesis:
   agent: research_manager
-  context:
-    - task_fm_market
-    - task_fm_narrative
-    - task_fm_sentiment
-    - task_fm_technical
+  context: []
   description: |
-    整合市场、舆情、情绪、技术四域产出，交付 ResearchSynthesis：主结论、分歧表、情景、信息缺口与下一步研究。
+    用户诉求：{{user_query}}，标的：{{symbol}}，补充：{{notes}}。
+
+    整合四域产出，交付 ResearchSynthesis。下列 JSON 由服务端注入（技术域为治理后终稿，勿改用未标注的 Crew 中间输出）。
+
+    --- 市场结构简报（MarketStructureBrief）---
+    {{upstream_market_context}}
+
+    --- 舆情与叙事（NarrativeBrief）---
+    {{upstream_narrative_context}}
+
+    --- 情绪与行为（SentimentAssessment）---
+    {{upstream_sentiment_context}}
+
+    --- 技术分析终稿（TechnicalAnalysisDeliverable，已 history enforcement + signal_quality）---
+    {{governed_technical_context}}
+
+    --- 分析记忆库统计（与 technical history 同源，勿编造胜率）---
+    {{analysis_stats_context}}
+
+    【综合规则】
+    - 缠论状态机、signal_quality、risk_notes 以 governed_technical_context 为准；不得写比其更激进的 STRATEGY_ACTIVE。
+    - 宏观/叙事/情绪与技术冲突时，disagreements 须列出各方证据强弱。
+    - stats 样本不足时，information_gaps 注明需更多 --save 与 outcome 回填。
+    - 不重复计算笔/中枢/买卖点；不输出具体下单价位。
   expected_output: |
-    符合 ResearchSynthesis 契约的完整 JSON；含 disagreements、scenarios、information_gaps。
+    符合 ResearchSynthesis 契约的完整 JSON；含 disagreements、scenarios、information_gaps、next_research_steps。
 
 task_fm_trading:
   agent: trader
