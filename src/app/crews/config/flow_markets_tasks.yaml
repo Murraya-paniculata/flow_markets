@@ -108,6 +108,7 @@ task_fm_technical:
   expected_output: |
     单一 JSON：TechnicalAnalysisDeliverable（brief + chanlun_v2 或 null）。
     禁止输出 Markdown 包裹、禁止前言、禁止编造 K 线/笔/中枢/点位。
+    JSON 语法必须合法：每个对象只写一层 `{`，禁止 `{ {` 或重复开括号；不要用 trailing comma。
 
 task_fm_synthesis:
   agent: research_manager

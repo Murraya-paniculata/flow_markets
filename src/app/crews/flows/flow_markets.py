@@ -111,6 +111,16 @@ def _fm_task(crew_base: Any, key: str, output_model: type) -> Task:
     )
 
 
+def _fm_task_technical(crew_base: Any) -> Task:
+    """
+    技术分析师 Task：不用 CrewAI 内置 output_pydantic 校验。
+
+    大模型偶发 ``{ {`` 等非法 JSON 会在 kickoff 时抛 ValidationError；
+    改由 ``parse_technical_deliverable_text`` 容错解析。
+    """
+    return Task(config=crew_base.tasks_config["task_fm_technical"])  # type: ignore[index]
+
+
 @CrewBase
 class FlowMarketsCrew:
     """FlowMarkets 多角色研究链：配置见 flow_markets_agents.yaml / flow_markets_tasks.yaml。"""
@@ -204,7 +214,7 @@ class FlowMarketsCrew:
 
     @task
     def task_fm_technical(self) -> Task:
-        return _fm_task(self, "task_fm_technical", TechnicalAnalysisDeliverable)
+        return _fm_task_technical(self)
 
     @task
     def task_fm_synthesis(self) -> Task:
@@ -450,22 +460,47 @@ def _execute_flow_markets_crew(
     return result, governed, metrics_name
 
 
+def _parse_technical_task_output(out: Any) -> TechnicalAnalysisDeliverable | None:
+    from app.schemas.technical_deliverable_parse import parse_technical_deliverable_text
+
+    p = getattr(out, "pydantic", None)
+    if isinstance(p, TechnicalAnalysisDeliverable):
+        return p
+    raw = getattr(out, "raw", None) or getattr(out, "output", None)
+    if not raw:
+        return None
+    try:
+        return parse_technical_deliverable_text(str(raw))
+    except Exception as exc:
+        logger.warning(
+            "technical_deliverable_parse_failed",
+            error=str(exc)[:300],
+            raw_preview=str(raw)[:200],
+        )
+        return None
+
+
 def _extract_technical_deliverable(
     result: Any,
 ) -> TechnicalAnalysisDeliverable | dict[str, Any] | None:
     """从 Crew kickoff 结果解析 TechnicalAnalysisDeliverable。"""
     pydantic_out = getattr(result, "pydantic", None)
-    if pydantic_out is not None:
+    if isinstance(pydantic_out, TechnicalAnalysisDeliverable):
         return pydantic_out
 
     tasks_out = getattr(result, "tasks_output", None) or []
     for out in reversed(tasks_out):
-        p = getattr(out, "pydantic", None)
-        if p is not None:
-            return p
+        parsed = _parse_technical_task_output(out)
+        if parsed is not None:
+            return parsed
 
     raw = getattr(result, "raw", None)
     if raw:
+        parsed = _parse_technical_task_output(
+            type("_RawOut", (), {"raw": raw, "pydantic": None, "output": None})()
+        )
+        if parsed is not None:
+            return parsed
         return {"raw": str(raw)}
     return None
 
@@ -641,7 +676,7 @@ def _standalone_technical_task(flow: FlowMarketsCrew) -> Task:
     """技术分析师单跑：与 task_fm_technical 同源，无上游 context，可改周期/回溯/分析模式。"""
     cfg = dict(flow.tasks_config["task_fm_technical"])  # type: ignore[index]
     cfg["context"] = []
-    return Task(config=cfg, output_pydantic=TechnicalAnalysisDeliverable)
+    return Task(config=cfg)
 
 
 def create_flow_markets_crew_for_run(
@@ -698,7 +733,9 @@ def run_technical_analyst_only(
         if mtf_err:
             return None, mtf_err
 
-    os.environ["CREWAI_TESTING"] = "true"
+    from app.core.crewai_env import apply_crewai_runtime_env
+
+    apply_crewai_runtime_env()
     inputs = _build_technical_crew_inputs(
         user_query=user_query,
         symbol=symbol,
@@ -795,7 +832,9 @@ def run_flow_markets_analysis(
         if mtf_err:
             return None, mtf_err, []
 
-    os.environ["CREWAI_TESTING"] = "true"
+    from app.core.crewai_env import apply_crewai_runtime_env
+
+    apply_crewai_runtime_env()
     inputs = _build_technical_crew_inputs(
         user_query=user_query,
         symbol=symbol,

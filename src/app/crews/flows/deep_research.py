@@ -193,7 +193,9 @@ def run_deep_research(
         (report_content, report_path, error_message)
         success 时 error_message 为空；失败时 report_content 可为 None，error_message 为错误信息。
     """
-    os.environ["CREWAI_TESTING"] = "true"
+    from app.core.crewai_env import apply_crewai_runtime_env
+
+    apply_crewai_runtime_env()
     settings = get_settings()
     run_id = str(uuid.uuid4())[:8]
     base_dir = Path(output_dir or settings.deep_research_output_dir).resolve()

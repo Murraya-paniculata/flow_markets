@@ -8,24 +8,13 @@ from typing import Any
 import requests
 
 from app.observability.logging import get_logger
+from app.services.chan.symbols import normalize_binance_symbol as _normalize_binance_symbol
 
 logger = get_logger(__name__)
 
 _SPOT_TICKER_URL = "https://api.binance.com/api/v3/ticker/24hr"
 _FUNDING_URL = "https://fapi.binance.com/fapi/v1/premiumIndex"
 _TIMEOUT = 15
-
-
-def _normalize_binance_symbol(symbol: str) -> tuple[str, str]:
-    raw = (symbol or "").strip().upper().replace("/", "").replace("-", "")
-    if not raw:
-        raise ValueError("symbol 不能为空")
-    if len(raw) >= 6 and raw.endswith("USDT"):
-        base = raw[:-4]
-        display = f"{base}/USDT"
-    else:
-        display = raw
-    return raw, display
 
 
 def _safe_float(value: Any) -> float | None:

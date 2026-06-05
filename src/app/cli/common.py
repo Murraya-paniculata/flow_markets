@@ -11,17 +11,22 @@ MIN_LOOKBACK = 50
 
 def bootstrap() -> Path:
     """将 ``src`` 加入 PYTHONPATH 并 chdir 到项目根（flow_markets/）。"""
+    from app.core.crewai_env import apply_crewai_runtime_env
+
     here = Path(__file__).resolve()
     root = here.parents[3]  # .../flow_markets/src/app/cli/common.py
     src = here.parents[2]
     if src.is_dir() and str(src) not in sys.path:
         sys.path.insert(0, str(src))
+    apply_crewai_runtime_env()
     os.chdir(root)
     return root
 
 
 def normalize_symbol(symbol: str) -> str:
-    return (symbol or "").upper().replace("/", "").replace("-", "").strip()
+    from app.services.chan.symbols import normalize_binance_symbol
+
+    return normalize_binance_symbol(symbol)[0]
 
 
 def display_symbol(symbol: str) -> str:

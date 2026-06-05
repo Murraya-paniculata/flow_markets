@@ -26,25 +26,13 @@ from app.services.chan.engine_policy import (
     resolve_zs_algo,
 )
 from app.services.chan.kline import cap_limit, get_klines, normalize_interval
+from app.services.chan.symbols import normalize_binance_symbol
 from app.services.chan.types import SimpleBi, SimpleMMD, SimpleXD, SimpleZS
 
 DEFAULT_LOOKBACK = 300
 DEFAULT_MAX_BI = 15
 DEFAULT_MAX_SEGMENT = 5
 MIN_KLINES = 50
-
-
-def _normalize_symbol(symbol: str) -> tuple[str, str]:
-    """返回 (binance_symbol, display_symbol)。"""
-    raw = (symbol or "").strip().upper().replace("/", "").replace("-", "")
-    if not raw:
-        raise ValueError("symbol 不能为空")
-    if len(raw) >= 6 and raw.endswith("USDT"):
-        base = raw[:-4]
-        display = f"{base}/USDT"
-    else:
-        display = raw
-    return raw, display
 
 
 def _dt_iso(dt) -> str:
@@ -277,7 +265,7 @@ def build_chan_structure_snapshot(
     resolved_zs = resolve_zs_algo(zs_algo) if resolved_engine != ENGINE_CHANLUN_ICL else None
 
     _apply_chan_engine_root()
-    binance_symbol, display_symbol = _normalize_symbol(symbol)
+    binance_symbol, display_symbol = normalize_binance_symbol(symbol)
     interval = normalize_interval(timeframe)
     limit = cap_limit(interval, lookback)
 

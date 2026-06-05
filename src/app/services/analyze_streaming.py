@@ -55,10 +55,28 @@ def get_analysis_stream_result(task_id: str) -> dict[str, Any] | None:
 
 
 def _display_symbol(symbol: str | None) -> str:
-    sym = (symbol or "").strip().upper().replace("/", "").replace("-", "")
-    if len(sym) > 6 and sym.endswith("USDT"):
-        return f"{sym[: -4]}/USDT"
-    return sym or "（未指定）"
+    from app.services.chan.symbols import is_placeholder_symbol, normalize_binance_symbol
+
+    raw = (symbol or "").strip()
+    if not raw or is_placeholder_symbol(raw):
+        return "（未指定）"
+    try:
+        return normalize_binance_symbol(raw)[1]
+    except ValueError:
+        return raw
+
+
+def _resolve_stream_binance_symbol(symbol: str) -> str:
+    """流式预拉 K 线用的 Binance symbol；无效/占位符返回空字符串。"""
+    from app.services.chan.symbols import is_placeholder_symbol, normalize_binance_symbol
+
+    raw = (symbol or "").strip()
+    if not raw or is_placeholder_symbol(raw):
+        return ""
+    try:
+        return normalize_binance_symbol(raw)[0]
+    except ValueError:
+        return ""
 
 
 def _emit_log(
@@ -169,7 +187,8 @@ async def analyze_flow_markets_streaming(
         yield {"type": "result", "data": result}
         return
 
-    sym = (symbol or "").strip()
+    sym_raw = (symbol or "").strip()
+    sym = _resolve_stream_binance_symbol(sym_raw)
     mtf_ctx: str | None = None
     snapshot = None
     mtf_snapshot = None
@@ -401,7 +420,9 @@ async def analyze_flow_markets_streaming(
             yield {"type": "result", "data": result}
             return
 
-    os.environ["CREWAI_TESTING"] = "true"
+    from app.core.crewai_env import apply_crewai_runtime_env
+
+    apply_crewai_runtime_env()
     inputs = _build_technical_crew_inputs(
         user_query=user_query,
         symbol=symbol,

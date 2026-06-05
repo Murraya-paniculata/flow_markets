@@ -300,9 +300,11 @@ class ChanlunStateMachineOutput(BaseModel):
         elif not cur:
             sm["current_state"] = "OBSERVE_ONLY"
 
-        standby = list(sm.get("standby_strategies") or [])
+        standby = [
+            s for s in (sm.get("standby_strategies") or []) if isinstance(s, dict)
+        ]
         if not any(
-            isinstance(s, dict) and str(s.get("direction", "")).lower() == "range"
+            str(s.get("direction", "")).lower() == "range"
             for s in standby
         ):
             standby.append(

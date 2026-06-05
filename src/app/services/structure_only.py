@@ -21,7 +21,9 @@ class StructureOnlyResult:
 
 
 def _normalize_symbol(symbol: str) -> str:
-    return (symbol or "").strip().upper().replace("/", "").replace("-", "")
+    from app.services.chan.symbols import normalize_binance_symbol
+
+    return normalize_binance_symbol(symbol)[0]
 
 
 def _multi_report(snapshot: MultiTimeframeSnapshot) -> str:

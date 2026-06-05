@@ -131,9 +131,18 @@ class GetChanStructureTool(BaseTool):
             )
             return text
         except ValueError as exc:
-            return self._fail("INSUFFICIENT_DATA", str(exc), _hint_for_value_error(exc))
+            msg = str(exc)
+            code = "INVALID_SYMBOL" if _is_symbol_error(msg) else "INSUFFICIENT_DATA"
+            return self._fail(code, msg, _hint_for_value_error(exc))
         except RuntimeError as exc:
-            return self._fail("UPSTREAM_ERROR", str(exc), "请检查网络或稍后重试行情/结构计算。")
+            msg = str(exc)
+            if "Invalid symbol" in msg or "code\":-1121" in msg:
+                return self._fail(
+                    "INVALID_SYMBOL",
+                    msg,
+                    "请使用 Binance 现货交易对，如 BTCUSDT、ETHUSDT；仅写 BTC 会自动补全为 BTCUSDT。",
+                )
+            return self._fail("UPSTREAM_ERROR", msg, "请检查网络或稍后重试行情/结构计算。")
         except Exception as exc:
             logger.exception("get_chan_structure_error", error=str(exc))
             return self._fail(
@@ -157,8 +166,15 @@ class GetChanStructureTool(BaseTool):
         return json.dumps(envelope.model_dump(mode="json"), ensure_ascii=False, indent=2)
 
 
+def _is_symbol_error(msg: str) -> bool:
+    keys = ("symbol", "交易对", "未指定", "无法识别")
+    return any(k in msg for k in keys)
+
+
 def _hint_for_value_error(exc: ValueError) -> str:
     msg = str(exc)
+    if _is_symbol_error(msg):
+        return "请传入 BTCUSDT 或 BTC（自动补 USDT）；占位符「未指定」无法拉 K 线。"
     if "不支持" in msg or "周期" in msg:
         return f"请使用支持的 timeframe：{SUPPORTED_TIMEFRAMES}。"
     if "K 线" in msg or "不足" in msg:
